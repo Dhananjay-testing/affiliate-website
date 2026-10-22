@@ -1,0 +1,9 @@
+---
+import { getCollection } from 'astro:content';
+import { published } from '../../lib/content';
+import Layout from '../../components/Layout.astro';
+import Breadcrumbs from '../../components/Breadcrumbs.astro';
+import SearchPanel from '../../components/SearchPanel.astro';
+const entries = [...published(await getCollection('articles')), ...published(await getCollection('guides'))];
+---
+<Layout title="Search" description="Search published articles and buying guides across Pickora." noindex><div class="wrap page-shell"><Breadcrumbs items={[{ label: 'Search' }]} /><header class="page-heading"><p class="eyebrow">Find something useful</p><h1>Search Pickora</h1><p>Look across published articles and buying guides by title, topic, category or tag.</p></header><SearchPanel entries={entries} /></div></Layout>

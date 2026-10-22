@@ -1,0 +1,38 @@
+---
+import { site } from '../config/site';
+import Brand from './Brand.astro';
+const current = Astro.url.pathname;
+---
+<header class="site-header">
+  <div class="header-inner">
+    <Brand />
+    <nav class="desktop-nav" aria-label="Main navigation">
+      {site.navigation.map((item) => <a href={item.href} class:list={{ active: current === item.href }}>{item.label}</a>)}
+    </nav>
+    <div class="header-actions"><a class="search-link" href="/search/" aria-label="Search articles and guides">⌕<span>Search</span></a>
+      <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="mobile-nav" aria-label="Open menu"><span></span><span></span></button>
+    </div>
+  </div>
+  <nav id="mobile-nav" class="mobile-nav" aria-label="Mobile navigation" hidden>
+    {site.navigation.map((item) => <a href={item.href}>{item.label}<span>↗</span></a>)}
+    <a href="/search/">Search articles and guides<span>⌕</span></a>
+  </nav>
+</header>
+<script>
+  const button = document.querySelector<HTMLButtonElement>('.menu-toggle');
+  const nav = document.querySelector<HTMLElement>('#mobile-nav');
+  button?.addEventListener('click', () => {
+    const open = button.getAttribute('aria-expanded') === 'true';
+    button.setAttribute('aria-expanded', String(!open));
+    button.setAttribute('aria-label', open ? 'Open menu' : 'Close menu');
+    if (nav) nav.hidden = open;
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && button?.getAttribute('aria-expanded') === 'true') {
+      button.setAttribute('aria-expanded', 'false');
+      button.setAttribute('aria-label', 'Open menu');
+      if (nav) nav.hidden = true;
+      button.focus();
+    }
+  });
+</script>

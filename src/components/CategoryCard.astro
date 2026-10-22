@@ -1,0 +1,5 @@
+---
+import type { Category } from '../data/categories';
+const { category } = Astro.props as { category: Category };
+---
+<a class="category-card" href={`/categories/${category.slug}/`}><span class="category-icon" aria-hidden="true">{category.icon}</span><span class="category-card-copy"><strong>{category.name}</strong><small>{category.description}</small></span><span class="card-arrow" aria-hidden="true">↗</span></a>

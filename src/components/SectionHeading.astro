@@ -1,0 +1,4 @@
+---
+const { eyebrow, title, description, link, linkLabel = 'View all' } = Astro.props;
+---
+<div class="section-heading"><div>{eyebrow && <p class="eyebrow">{eyebrow}</p>}<h2>{title}</h2>{description && <p class="muted">{description}</p>}</div>{link && <a class="text-link" href={link}>{linkLabel}<span aria-hidden="true">↗</span></a>}</div>

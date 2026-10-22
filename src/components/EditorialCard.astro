@@ -1,0 +1,8 @@
+---
+import type { EditorialEntry } from '../lib/content';
+import { readingMinutes } from '../lib/content';
+const { item, label = 'Article' } = Astro.props as { item: EditorialEntry; label?: string };
+const href = `/${item.collection === 'guides' ? 'guides' : 'articles'}/${item.id}/`;
+const body = 'body' in item ? item.body ?? '' : '';
+---
+<article class="editorial-card"><a href={href} class="editorial-card-image" aria-label={`Read ${item.data.title}`}><span class="art-orbit" aria-hidden="true">{item.collection === 'guides' ? '↗' : '✳'}</span><span class="card-label">{label}</span></a><div class="editorial-card-body"><div class="card-meta"><span>{item.data.category}</span><span>{readingMinutes(body)} min read</span></div><h3><a href={href}>{item.data.title}</a></h3><p>{item.data.description}</p><a class="text-link" href={href}>Read {label.toLowerCase()} <span aria-hidden="true">→</span></a></div></article>

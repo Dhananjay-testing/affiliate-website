@@ -1,0 +1,48 @@
+---
+import type { EditorialEntry } from '../lib/content';
+import { categories } from '../data/categories';
+const { entries } = Astro.props as { entries: EditorialEntry[] };
+const records = entries.map((item) => ({
+  title: item.data.title, description: item.data.description, category: item.data.category,
+  tags: item.data.tags, href: `/${item.collection === 'guides' ? 'guides' : 'articles'}/${item.id}/`,
+  type: item.collection === 'guides' ? 'Buying guide' : 'Article',
+}));
+---
+<section class="search-panel" data-records={JSON.stringify(records)}>
+  <label for="site-search">Search articles and buying guides</label>
+  <div class="search-input-wrap"><span aria-hidden="true">⌕</span><input id="site-search" type="search" autocomplete="off" placeholder="Try “kitchen”, “study” or “gardening”" /><button type="button" class="clear-search" aria-label="Clear search" hidden>Clear</button></div>
+  <p class="search-hint" aria-live="polite">Search published articles and guides by title, topic or category.</p>
+  <div class="search-results" aria-live="polite"></div>
+  <button class="button button-secondary load-more" type="button" hidden>Show more results</button>
+  <div class="search-browse"><strong>Browse by category</strong><div>{categories.map((category) => <a href={`/categories/${category.slug}/`}>{category.name}<span aria-hidden="true">↗</span></a>)}</div></div>
+</section>
+<script>
+  const panel = document.querySelector<HTMLElement>('.search-panel');
+  const input = document.querySelector<HTMLInputElement>('#site-search');
+  const results = document.querySelector<HTMLElement>('.search-results');
+  const hint = document.querySelector<HTMLElement>('.search-hint');
+  const clear = document.querySelector<HTMLButtonElement>('.clear-search');
+  const loadMore = document.querySelector<HTMLButtonElement>('.load-more');
+  const records = JSON.parse(panel?.dataset.records ?? '[]') as { title: string; description: string; category: string; tags: string[]; href: string; type: string }[];
+  let visibleLimit = 20;
+  const render = () => {
+    if (!input || !results || !hint || !clear) return;
+    const query = input.value.trim().toLocaleLowerCase();
+    clear.hidden = !query;
+    if (!query) { hint.textContent = 'Search published articles and guides by title, topic or category.'; results.replaceChildren(); return; }
+    const matches = records.filter((record) => [record.title, record.description, record.category, ...record.tags].join(' ').toLocaleLowerCase().includes(query));
+    hint.textContent = matches.length ? (matches.length > visibleLimit ? `Showing ${visibleLimit} of ${matches.length} results` : `${matches.length} ${matches.length === 1 ? 'result' : 'results'}`) : 'No matches yet. Try a broader topic or browse a category below.';
+    if (loadMore) loadMore.hidden = matches.length <= visibleLimit;
+    results.replaceChildren();
+    for (const record of matches.slice(0, visibleLimit)) {
+      const article = document.createElement('article'); article.className = 'search-result';
+      const type = document.createElement('span'); type.className = 'eyebrow'; type.textContent = `${record.type} · ${record.category}`;
+      const heading = document.createElement('h2'); const link = document.createElement('a'); link.href = record.href; link.textContent = record.title; heading.append(link);
+      const description = document.createElement('p'); description.textContent = record.description;
+      article.append(type, heading, description); results.append(article);
+    }
+  };
+  input?.addEventListener('input', () => { visibleLimit = 20; render(); });
+  clear?.addEventListener('click', () => { if (input) { input.value = ''; input.focus(); visibleLimit = 20; render(); } });
+  loadMore?.addEventListener('click', () => { visibleLimit += 20; render(); });
+</script>

@@ -1,0 +1,8 @@
+---
+interface Crumb { label: string; href?: string }
+const { items } = Astro.props as { items: Crumb[] };
+const crumbs = [{ label: 'Home', href: '/' }, ...items];
+const schema = Astro.site ? { '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: crumbs.map((crumb, index) => ({ '@type': 'ListItem', position: index + 1, name: crumb.label, ...(crumb.href ? { item: new URL(crumb.href, Astro.site).toString() } : {}) })) } : undefined;
+---
+<nav class="breadcrumbs" aria-label="Breadcrumb"><ol>{crumbs.map((crumb, index) => <li>{index > 0 && <span aria-hidden="true">/</span>}{crumb.href && index !== crumbs.length - 1 ? <a href={crumb.href}>{crumb.label}</a> : <span aria-current="page">{crumb.label}</span>}</li>)}</ol></nav>
+{schema && <script type="application/ld+json" set:html={JSON.stringify(schema)} />}

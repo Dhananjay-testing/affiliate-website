@@ -1,0 +1,24 @@
+---
+import Layout from '../components/Layout.astro';
+import Breadcrumbs from '../components/Breadcrumbs.astro';
+---
+<Layout title="Privacy policy" description="A plain-language overview of privacy practices for this static site." noindex={true}>
+  <div class="wrap page-shell">
+    <Breadcrumbs items={[{ label: 'Privacy policy' }]} />
+    <article class="prose-page">
+      <p class="eyebrow">Draft for owner review · Last updated: 22 October 2026</p>
+      <h1>Privacy policy</h1>
+      <p class="lead">This project is designed as a static editorial website. No user account, payment or contact-form system is configured.</p>
+      <p>This draft explains intended site behaviour, but the owner should review and complete it for the actual hosting provider, analytics choices, contact method, affiliate programs and applicable legal requirements before launch.</p>
+      <h2>Information collected by this site</h2>
+      <p>The site’s local search runs in your browser and does not send your search terms to a server. No analytics, advertising pixels, newsletter, account or contact form are configured in this project.</p>
+      <h2>Hosting and external links</h2>
+      <p>When the site is deployed, its hosting provider may process technical request data such as IP address, browser details and access logs to deliver and protect the service. External retailer links take you to third-party sites whose privacy practices are governed by their own policies. Review those policies before sharing information or making a purchase.</p>
+      <h2>Cookies and similar technologies</h2>
+      <p>This site does not intentionally set first-party tracking cookies. Hosting, security or third-party features may have their own requirements; the owner should check the provider’s current documentation and update this notice before enabling those features.</p>
+      <h2>Contact and changes</h2>
+      <p>No contact address is configured yet. Add a monitored contact method in the central site settings and publish it here before launch. This policy should be updated whenever site features or data practices change.</p>
+      <p>This draft is general project information, not legal advice or a determination that the final site meets every applicable requirement.</p>
+    </article>
+  </div>
+</Layout>

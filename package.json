@@ -1,0 +1,28 @@
+{
+  "name": "pickora-affiliate-website",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.22.0"
+  },
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro check && astro build && tsx scripts/validate-routes.ts",
+    "check": "astro check && tsx scripts/validate-content.ts",
+    "check:routes": "tsx scripts/validate-routes.ts",
+    "preview": "astro preview"
+  },
+  "dependencies": {
+    "astro": "6.4.8"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.0",
+    "@types/node": "^22.19.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0"
+  },
+  "allowScripts": {
+    "esbuild@0.27.7": true
+  }
+}

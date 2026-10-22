@@ -1,0 +1,22 @@
+---
+import type { Product } from '../data/products';
+import { site } from '../config/site';
+const { product } = Astro.props as { product: Product };
+---
+<article class="product-card">
+  <div class="product-placeholder" aria-hidden="true"><span>✳</span></div>
+  <div class="product-card-body">
+    <p class="eyebrow">{product.category}</p>
+    <h3>{product.name}</h3>
+    <p>{product.description}</p>
+    <p class="product-note"><strong>Intended use:</strong> {product.intendedUse}</p>
+    <details class="product-details">
+      <summary>Selection notes</summary>
+      {product.selectionCriteria.length > 0 && <div><strong>What we considered</strong><ul>{product.selectionCriteria.map((item) => <li>{item}</li>)}</ul></div>}
+      {product.benefits.length > 0 && <div><strong>Potential benefits</strong><ul>{product.benefits.map((item) => <li>{item}</li>)}</ul></div>}
+      {product.limitations.length > 0 && <div><strong>Limitations</strong><ul>{product.limitations.map((item) => <li>{item}</li>)}</ul></div>}
+    </details>
+    <span class="disclosure">{site.affiliateDisclosure}</span>
+    <a class="button button-secondary" href={product.affiliateUrl} target="_blank" rel="sponsored nofollow noopener noreferrer">View at {product.retailer}<span aria-hidden="true">↗</span></a>
+  </div>
+</article>

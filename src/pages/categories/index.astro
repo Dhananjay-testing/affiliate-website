@@ -1,0 +1,7 @@
+---
+import { categories } from '../../data/categories';
+import Layout from '../../components/Layout.astro';
+import Breadcrumbs from '../../components/Breadcrumbs.astro';
+import CategoryCard from '../../components/CategoryCard.astro';
+---
+<Layout title="All categories" description="Explore product topics and practical buying advice across everyday categories."><div class="wrap page-shell"><Breadcrumbs items={[{ label: 'Categories' }]} /><header class="page-heading"><p class="eyebrow">A world of useful finds</p><h1>Explore all categories</h1><p>Start with a topic that matters to you. Each category will grow with helpful, reviewed guides and recommendations.</p></header><div class="category-grid category-grid-all">{categories.map((category) => <CategoryCard category={category} />)}</div></div></Layout>

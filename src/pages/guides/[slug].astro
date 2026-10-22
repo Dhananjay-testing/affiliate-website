@@ -1,0 +1,16 @@
+---
+import { getCollection, render } from 'astro:content';
+import { published, readingMinutes } from '../../lib/content';
+import { categories } from '../../data/categories';
+import { site } from '../../config/site';
+import Layout from '../../components/Layout.astro';
+import Breadcrumbs from '../../components/Breadcrumbs.astro';
+export async function getStaticPaths() { return published(await getCollection('guides')).map((item) => ({ params: { slug: item.id }, props: { item } })); }
+const { item } = Astro.props;
+const { Content } = await render(item);
+const body = item.body ?? '';
+const toc = body.split('\n').filter((line) => /^##\s+/.test(line)).map((line) => line.replace(/^##\s+/, '').replace(/[*`]/g, ''));
+const category = categories.find((entry) => entry.name === item.data.category || entry.shortName === item.data.category);
+const structuredData = { '@context': 'https://schema.org', '@type': 'Article', headline: item.data.title, description: item.data.description, datePublished: item.data.publishDate.toISOString(), ...(item.data.updatedDate ? { dateModified: item.data.updatedDate.toISOString() } : {}), author: { '@type': 'Organization', name: item.data.author }, publisher: { '@type': 'Organization', name: site.name, ...(site.url ? { url: site.url } : {}) }, ...(site.url ? { mainEntityOfPage: new URL(`/guides/${item.id}/`, site.url).toString() } : {}) };
+---
+<Layout title={item.data.title} description={item.data.description} canonicalPath={`/guides/${item.id}/`}><div class="wrap article-shell"><Breadcrumbs items={[{ label: 'Buying guides', href: '/guides/' }, { label: item.data.title }]} /><article class="article"><header class="article-header"><p class="eyebrow">{category ? <a href={`/categories/${category.slug}/`}>{item.data.category}</a> : item.data.category} · Buying guide</p><h1>{item.data.title}</h1><p class="article-deck">{item.data.description}</p><div class="article-byline"><span>By {item.data.author}</span><span>{item.data.publishDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}</span><span>{readingMinutes(body)} min read</span></div></header>{item.data.affiliateLinks && <p class="inline-disclosure">{site.affiliateDisclosure}</p>}{toc.length > 2 && <nav class="table-of-contents" aria-label="Table of contents"><strong>In this guide</strong><ul>{toc.map((heading) => <li><a href={`#${heading.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')}`}>{heading}</a></li>)}</ul></nav>}<div class="prose"><Content /></div>{item.data.sources.length > 0 && <aside class="sources"><h2>Sources & further reading</h2><ul>{item.data.sources.map((source) => <li><a href={source.url} target="_blank" rel="noopener noreferrer">{source.label} ↗</a></li>)}</ul></aside>}<a class="text-link article-back" href="/guides/">← All buying guides</a></article></div></Layout><script type="application/ld+json" set:html={JSON.stringify(structuredData)} />

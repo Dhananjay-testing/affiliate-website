@@ -1,0 +1,6 @@
+---
+import { site } from '../config/site';
+import Layout from '../components/Layout.astro';
+import Breadcrumbs from '../components/Breadcrumbs.astro';
+---
+<Layout title="Contact" description="Contact Pickora with editorial questions or corrections."><div class="wrap page-shell"><Breadcrumbs items={[{ label: 'Contact' }]} /><article class="prose-page"><p class="eyebrow">We welcome thoughtful notes</p><h1>Contact Pickora</h1><p class="lead">Have a correction, question or useful suggestion? We’d like to hear from you.</p>{site.contactEmail ? <p>Email us at <a href={`mailto:${site.contactEmail}`}>{site.contactEmail}</a>. For corrections, please include the page URL and the detail you’d like us to review.</p> : <div class="empty-state contact-empty"><span class="empty-icon">✉</span><div><h2>Contact details are not configured yet</h2><p>This project does not have a monitored contact address configured. A real email address can be added in the central site settings before launch.</p></div></div>}<h2>Editorial questions</h2><p>For affiliate and editorial questions, see our <a href="/affiliate-disclosure/">affiliate disclosure</a> and <a href="/editorial-policy/">editorial policy</a>.</p><p>We do not offer a contact form because no secure form service is configured.</p></article></div></Layout>

@@ -1,0 +1,23 @@
+---
+import { site } from '../config/site';
+import '../styles/global.css';
+import Header from './Header.astro';
+import Footer from './Footer.astro';
+interface Props { title: string; description?: string; canonicalPath?: string; image?: string; noindex?: boolean }
+const { title, description = site.description, canonicalPath = Astro.url.pathname, image, noindex = false } = Astro.props;
+const canonical = site.url ? new URL(canonicalPath, site.url).toString() : undefined;
+const socialImage = site.url ? new URL(image ?? site.socialCard, site.url).toString() : undefined;
+---
+<!doctype html>
+<html lang="en-IN">
+  <head>
+    <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="generator" content={Astro.generator} /><meta name="theme-color" content="#f5f7f2" />
+    <title>{title} · {site.name}</title><meta name="description" content={description} />
+    {canonical && <link rel="canonical" href={canonical} />}<link rel="icon" type="image/svg+xml" href={site.logo} />
+    <meta property="og:type" content="website" /><meta property="og:site_name" content={site.name} /><meta property="og:title" content={`${title} · ${site.name}`} /><meta property="og:description" content={description} />{canonical && <meta property="og:url" content={canonical} />}{socialImage && <meta property="og:image" content={socialImage} />}
+    <meta name="twitter:card" content="summary_large_image" /><meta name="twitter:title" content={`${title} · ${site.name}`} /><meta name="twitter:description" content={description} />{socialImage && <meta name="twitter:image" content={socialImage} />}
+    {noindex && <meta name="robots" content="noindex,follow" />}
+  </head>
+  <body><a class="skip-link" href="#main">Skip to content</a><Header /><main id="main"><slot /></main><Footer /></body>
+</html>
