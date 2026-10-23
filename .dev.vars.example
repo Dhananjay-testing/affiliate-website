@@ -1,0 +1,3 @@
+# Copy this file to .dev.vars for loopback-only local dashboard testing.
+# Never add .dev.vars to source control or set this bypass in Cloudflare.
+PICKORA_LOCAL_AUTH=true

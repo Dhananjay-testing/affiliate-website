@@ -2,20 +2,20 @@
 import Layout from '../components/Layout.astro';
 import Breadcrumbs from '../components/Breadcrumbs.astro';
 ---
-<Layout title="Privacy policy" description="A plain-language overview of privacy practices for this static site." noindex={true}>
+<Layout title="Privacy policy" description="A draft overview of Pickora's public site and private product dashboard." noindex={true}>
   <div class="wrap page-shell">
     <Breadcrumbs items={[{ label: 'Privacy policy' }]} />
     <article class="prose-page">
       <p class="eyebrow">Draft for owner review · Last updated: 22 October 2026</p>
       <h1>Privacy policy</h1>
-      <p class="lead">This project is designed as a static editorial website. No user account, payment or contact-form system is configured.</p>
-      <p>This draft explains intended site behaviour, but the owner should review and complete it for the actual hosting provider, analytics choices, contact method, affiliate programs and applicable legal requirements before launch.</p>
+      <p class="lead">The public website has no visitor accounts, payments or contact form. A separate private dashboard lets the site owner manage product information.</p>
+      <p>This draft explains the current project setup, but the owner should review and complete it for the actual hosting provider, identity provider, contact method, affiliate programs and applicable legal requirements before launch.</p>
       <h2>Information collected by this site</h2>
-      <p>The site’s local search runs in your browser and does not send your search terms to a server. No analytics, advertising pixels, newsletter, account or contact form are configured in this project.</p>
+      <p>The site’s search runs in your browser and does not send your search terms to a server. No analytics, advertising pixels or newsletter are configured. Product details entered by the owner are stored in Cloudflare D1. Product images are not collected or stored; public product cards use a built-in placeholder. Unpublished products are available only through the authenticated owner dashboard, not public listings.</p>
       <h2>Hosting and external links</h2>
-      <p>When the site is deployed, its hosting provider may process technical request data such as IP address, browser details and access logs to deliver and protect the service. External retailer links take you to third-party sites whose privacy practices are governed by their own policies. Review those policies before sharing information or making a purchase.</p>
+      <p>When the site is deployed, Cloudflare may process technical request data such as IP address, browser details and access logs to deliver and protect the service. The private owner dashboard uses GitHub OAuth; GitHub processes the owner's account identity during sign-in, and Pickora stores a server-side session in Cloudflare D1. External retailer links take you to third-party sites whose privacy practices are governed by their own policies. Review those policies before sharing information or making a purchase.</p>
       <h2>Cookies and similar technologies</h2>
-      <p>This site does not intentionally set first-party tracking cookies. Hosting, security or third-party features may have their own requirements; the owner should check the provider’s current documentation and update this notice before enabling those features.</p>
+      <p>The public site does not intentionally set first-party tracking cookies. The private dashboard sets a Secure, HttpOnly session cookie when the owner signs in. Hosting, security or third-party features may have their own requirements; the owner should check the provider’s current documentation and update this notice before enabling those features.</p>
       <h2>Contact and changes</h2>
       <p>No contact address is configured yet. Add a monitored contact method in the central site settings and publish it here before launch. This policy should be updated whenever site features or data practices change.</p>
       <p>This draft is general project information, not legal advice or a determination that the final site meets every applicable requirement.</p>

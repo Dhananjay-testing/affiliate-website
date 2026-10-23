@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en-IN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex,nofollow,noarchive">
+    <title>Product admin · Pickora</title>
+    <link rel="icon" type="image/svg+xml" href="/brand/pickora-mark.svg">
+    <link rel="stylesheet" href="/admin/admin.css">
+    <script type="module" src="/admin/admin.js"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to dashboard</a>
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Pickora homepage"><img src="/brand/pickora-mark.svg" alt="" width="34" height="34"><span>Pickora <small>product desk</small></span></a>
+      <div class="top-actions"><span id="signed-in" aria-live="polite">Checking secure session…</span><button id="logout" class="quiet-link" type="button">Log out</button><a class="quiet-link" href="/">View website ↗</a></div>
+    </header>
+    <main id="main" class="dashboard">
+      <section class="intro"><p class="eyebrow">Private product dashboard</p><h1>Manage product recommendations</h1><p>Add a product, check the exact Special Link, and choose whether it is a draft or should publish immediately. Product details you enter are not researched or verified automatically.</p></section>
+      <p id="notice" class="notice" role="status" aria-live="polite" hidden></p>
+      <section class="panel editor-panel" aria-labelledby="editor-heading">
+        <div class="panel-heading"><div><p class="eyebrow">Product details</p><h2 id="editor-heading">Add a product</h2></div><button id="cancel-edit" class="text-button" type="button" hidden>Cancel edit</button></div>
+        <form id="product-form" novalidate>
+          <div class="field-grid">
+            <label class="field field-wide">Product name <span class="required">Required</span><input name="name" autocomplete="off" maxlength="160" required aria-describedby="name-help"><small id="name-help">Use the exact product name from the seller page. The name creates the page address.</small></label>
+            <label class="field">Category <span class="required">Required</span><select name="category" required></select></label>
+            <label class="field">Publication status <span class="required">Required</span><select name="status"><option value="published">Publish now</option><option value="draft">Save as draft</option></select></label>
+            <label class="field field-wide">Short description <span class="required">Required</span><textarea name="description" rows="3" maxlength="500" required></textarea></label>
+            <label class="field">Key features <span class="required">Required</span><textarea name="keyFeatures" rows="4" required aria-describedby="list-help"></textarea><small id="list-help">Enter one fact per line. Include only details you have checked.</small></label>
+            <label class="field">Intended use <span class="required">Required</span><textarea name="intendedUse" rows="4" maxlength="300" required></textarea></label>
+            <label class="field">Potential benefits <span class="required">Required</span><textarea name="benefits" rows="4" required></textarea></label>
+            <label class="field">Limitations and trade-offs <span class="required">Required</span><textarea name="limitations" rows="4" required></textarea></label>
+            <label class="field field-wide">Amazon India product page <span class="required">Required</span><input name="productUrl" type="url" inputmode="url" autocomplete="url" placeholder="https://www.amazon.in/..." required><small>HTTPS Amazon India addresses only.</small></label>
+            <label class="field field-wide">Amazon Associates Special Link <span class="required">Required</span><input name="affiliateUrl" type="url" inputmode="url" autocomplete="url" placeholder="Paste the complete Special Link from Associates Central" required><small>The full link is stored exactly as entered. It must include your confirmed tracking tag; do not build or edit the tracking part yourself.</small></label>
+            <fieldset class="field field-wide image-field"><legend>Product image <span>Optional</span></legend><p>Image uploads are not configured. Product cards will use Pickora’s built-in placeholder.</p></fieldset>
+            <fieldset class="field field-wide price-field"><legend>Price</legend><label><input type="checkbox" disabled> Show price <span class="muted">Unavailable until a permitted Amazon data source is configured.</span></label><small>Manually entered prices are never published as current prices.</small></fieldset>
+          </div>
+          <div class="form-actions"><button id="save-product" class="button button-primary" type="submit">Publish product</button><button id="save-draft" class="button button-secondary" type="button">Save as draft</button><span id="saving" role="status" aria-live="polite"></span></div>
+        </form>
+      </section>
+      <section class="panel list-panel" aria-labelledby="list-heading">
+        <div class="panel-heading"><div><p class="eyebrow">Stored in your database</p><h2 id="list-heading">Products</h2></div><button id="refresh-list" class="text-button" type="button">Refresh list</button></div>
+        <div id="product-list" class="product-list" aria-live="polite"><p class="muted">Loading products…</p></div>
+      </section>
+      <aside class="integrity-note"><strong>A note about product integrity</strong><p>Publishing sends the product to the public website immediately. Pickora does not check the product claims, Amazon page, Special Link ownership or current availability. Please verify each item yourself before choosing “Publish now”. No prices are stored or displayed.</p><a href="/affiliate-disclosure/">Review the affiliate disclosure ↗</a></aside>
+      <footer><span>Pickora product desk</span><button id="logout-footer" class="quiet-link" type="button">End secure session</button></footer>
+    </main>
+  </body>
+</html>

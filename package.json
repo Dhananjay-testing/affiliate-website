@@ -8,19 +8,24 @@
   },
   "scripts": {
     "dev": "astro dev",
+    "dev:pages": "npm run build && wrangler pages dev dist --port 8788",
+    "db:migrate:local": "wrangler d1 execute pickora-local --local --file=migrations/0001_products.sql && wrangler d1 execute pickora-local --local --file=migrations/0002_admin_auth.sql",
     "build": "astro check && astro build && tsx scripts/validate-routes.ts",
     "check": "astro check && tsx scripts/validate-content.ts",
     "check:routes": "tsx scripts/validate-routes.ts",
+    "test:admin": "tsx tests/product-validation.test.ts && tsx tests/admin-auth.test.ts",
     "preview": "astro preview"
   },
   "dependencies": {
-    "astro": "6.4.8"
+    "astro": "6.4.8",
+    "jose": "^6.2.13"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.0",
     "@types/node": "^22.19.0",
     "tsx": "^4.20.0",
-    "typescript": "^5.9.0"
+    "typescript": "^5.9.0",
+    "wrangler": "^4.151.3"
   },
   "allowScripts": {
     "esbuild@0.27.7": true

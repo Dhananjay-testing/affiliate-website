@@ -2,20 +2,17 @@
 import { getCollection } from 'astro:content';
 import { categories, categoryBySlug } from '../../data/categories';
 import { published } from '../../lib/content';
-import { publishedProducts } from '../../data/products';
 import Layout from '../../components/Layout.astro';
 import Breadcrumbs from '../../components/Breadcrumbs.astro';
 import EditorialCard from '../../components/EditorialCard.astro';
-import ProductCard from '../../components/ProductCard.astro';
 export function getStaticPaths() { return categories.map((category) => ({ params: { slug: category.slug } })); }
 const category = categoryBySlug(Astro.params.slug ?? '')!;
 const articles = published(await getCollection('articles')).filter((item) => item.data.category === category.name || item.data.category === category.shortName);
 const guides = published(await getCollection('guides')).filter((item) => item.data.category === category.name || item.data.category === category.shortName);
-const products = publishedProducts.filter((item) => item.category === category.name || item.category === category.shortName);
 ---
 <Layout title={category.name} description={category.description}><div class="wrap page-shell"><Breadcrumbs items={[{ label: 'Categories', href: '/categories/' }, { label: category.name }]} /><header class="page-heading category-heading"><span class="category-icon large" aria-hidden="true">{category.icon}</span><div><p class="eyebrow">Category</p><h1>{category.name}</h1><p>{category.description}</p></div></header>
   {guides.length > 0 && <section class="content-section"><h2>Buying guides</h2><div class="editorial-grid">{guides.map((item) => <EditorialCard item={item} label="Buying guide" />)}</div></section>}
-  {products.length > 0 && <section class="content-section"><h2>Product recommendations</h2><div class="product-grid">{products.map((product) => <ProductCard product={product} />)}</div></section>}
+  <section class="content-section" data-product-section hidden><h2>Product recommendations</h2><div data-product-feed data-category={category.name}><div data-product-list class="product-grid" aria-live="polite"></div><section class="empty-state category-empty" data-empty-feed hidden><span class="empty-icon">⌕</span><div><h2>No product recommendations yet</h2><p>We only publish products after their details and affiliate link are checked.</p></div></section></div></section>
   {articles.length > 0 && <section class="content-section"><h2>Related articles</h2><div class="editorial-grid">{articles.map((item) => <EditorialCard item={item} />)}</div></section>}
-  {guides.length + articles.length + products.length === 0 && <section class="empty-state category-empty"><span class="empty-icon">{category.icon}</span><div><p class="eyebrow">A category worth growing well</p><h2>We’re building this section thoughtfully</h2><p>There aren’t published guides or product recommendations in {category.name.toLowerCase()} yet. We’ll add useful, reviewed content as it’s ready.</p><a href="/categories/" class="text-link">Explore another category <span>→</span></a></div></section>}
-  <div class="back-row"><a class="text-link" href="/categories/">← All categories</a></div></div></Layout>
+  {guides.length + articles.length === 0 && <section class="empty-state category-empty" data-empty-category><span class="empty-icon">{category.icon}</span><div><p class="eyebrow">A category worth growing well</p><h2>We’re building this section thoughtfully</h2><p>There aren’t published guides or product recommendations in {category.name.toLowerCase()} yet. We’ll add useful, reviewed content as it’s ready.</p><a href="/categories/" class="text-link">Explore another category <span>→</span></a></div></section>}
+  <div class="back-row"><a class="text-link" href="/categories/">← All categories</a></div></div><script>import '../../scripts/product-feed';</script></Layout>

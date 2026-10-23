@@ -20,6 +20,7 @@ for (const file of htmlFiles) {
     let url: URL;
     try { url = new URL(value, 'https://pickora.invalid'); } catch { failures.push(`${file}: invalid local URL ${value}`); continue; }
     if (url.origin !== 'https://pickora.invalid') continue;
+    if (url.pathname.startsWith('/cdn-cgi/')) continue; // Cloudflare may supply system routes at deploy time.
     const decoded = decodeURIComponent(url.pathname).replace(/^\/+/, '');
     const candidates = decoded
       ? [resolve(dist, decoded), resolve(dist, decoded, 'index.html')]
