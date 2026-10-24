@@ -9,6 +9,7 @@ class MemoryD1 implements D1Database {
   states = new Map<string, Row>();
   sessions = new Map<string, Row>();
   limits = new Map<string, Row>();
+  failRunSql?: string;
   prepare(sql: string): D1Statement {
     const store = this;
     const values: unknown[] = [];
@@ -34,6 +35,7 @@ class MemoryD1 implements D1Database {
       },
       async all<T>() { return { success: true, results: [] as T[] }; },
       async run() {
+        if (store.failRunSql && sql.includes(store.failRunSql)) throw new Error('simulated storage failure with details that must not be logged');
         if (sql.includes('INSERT INTO admin_oauth_states')) {
           const [key, expires, created] = values as [string, number, number];
           store.states.set(key, { state_hash: key, expires_at: expires, created_at: created });
@@ -76,10 +78,17 @@ function context(path: string, options: { method?: string; headers?: HeadersInit
   };
 }
 function db(): MemoryD1 { return env.DB as MemoryD1; }
-async function withFetch(responder: (url: string, init?: RequestInit) => Response | Promise<Response>, run: () => Promise<void>) {
+async function withFetch<T>(responder: (url: string, init?: RequestInit) => Response | Promise<Response>, run: () => Promise<T>): Promise<T> {
   const original = globalThis.fetch;
   globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => responder(String(input), init)) as typeof fetch;
   return run().finally(() => { globalThis.fetch = original; });
+}
+async function captureConsoleError<T>(run: () => Promise<T>): Promise<{ result: T; entries: unknown[][] }> {
+  const original = console.error;
+  const entries: unknown[][] = [];
+  console.error = ((...args: unknown[]) => { entries.push(args); }) as typeof console.error;
+  try { return { result: await run(), entries }; }
+  finally { console.error = original; }
 }
 async function beginLogin(): Promise<{ state: string; authorizeUrl: URL }> {
   const response = await handleGitHubOAuth(context('/api/admin/auth/login', { headers: { 'CF-Connecting-IP': '192.0.2.10' } }));
@@ -128,6 +137,48 @@ const tests: Array<[string, () => void | Promise<void>]> = [
       assert.equal(response?.headers.has('Set-Cookie'), false);
       assert.equal(db().sessions.size, 1);
     });
+  }],
+  ['logs only a safe category and correlation ID when the code exchange throws', async () => {
+    const { state } = await beginLogin();
+    const code = 'private-test-code';
+    const { result: response, entries } = await captureConsoleError(() => withFetch(() => {
+      throw new Error('provider exception must not be logged');
+    }, async () => {
+      const result = await handleGitHubOAuth(context(`/api/admin/auth/callback?code=${code}&state=${state}`, { headers: { 'CF-Connecting-IP': '192.0.2.15' } }));
+      assert.ok(result);
+      return result;
+    }));
+    assert.equal(response.status, 503);
+    const body = await response.json() as { error: string; requestId: string };
+    assert.match(body.requestId, /^[A-Fa-f0-9]{12}$/);
+    assert.match(body.error, /Sign-in could not be completed/);
+    assert.equal(entries.length, 1);
+    const logged = JSON.stringify(entries);
+    assert.match(logged, /github_code_exchange/);
+    assert.match(logged, new RegExp(body.requestId));
+    assert.doesNotMatch(logged, new RegExp(`${code}|${state}|server-only-secret|github-access-token-long|provider exception`));
+    assert.doesNotMatch(JSON.stringify(body), new RegExp(`${code}|${state}|server-only-secret|github-access-token-long`));
+  }],
+  ['identifies a D1 session-write failure without logging exception details', async () => {
+    const { state } = await beginLogin();
+    db().failRunSql = 'INSERT INTO admin_sessions';
+    const { result: response, entries } = await captureConsoleError(() => withFetch((url) => url.endsWith('/access_token')
+      ? Response.json({ access_token: 'github-access-token-long', token_type: 'bearer' })
+      : Response.json({ id: Number(ownerId), login: 'pickora-owner' }), async () => {
+      const result = await handleGitHubOAuth(context(`/api/admin/auth/callback?code=session-write-code&state=${state}`, { headers: { 'CF-Connecting-IP': '192.0.2.16' } }));
+      assert.ok(result);
+      return result;
+    }));
+    db().failRunSql = undefined;
+    assert.equal(response.status, 503);
+    const body = await response.json() as { error: string; requestId: string };
+    assert.match(body.requestId, /^[A-Fa-f0-9]{12}$/);
+    assert.equal(entries.length, 1);
+    const logged = JSON.stringify(entries);
+    assert.match(logged, /session_persistence/);
+    assert.match(logged, new RegExp(body.requestId));
+    assert.doesNotMatch(logged, /simulated storage failure|session-write-code|server-only-secret|github-access-token-long/);
+    assert.equal(db().sessions.size, 1);
   }],
   ['rejects invalid, missing, expired, and reused OAuth state', async () => {
     const missing = await handleGitHubOAuth(context('/api/admin/auth/callback?code=code', { headers: { 'CF-Connecting-IP': '192.0.2.12' } }));
