@@ -18,12 +18,24 @@ type CallbackFailureCategory =
   | 'session_persistence'
   | 'session_response';
 
-function callbackFailure(category: CallbackFailureCategory, status?: number): Response {
+type SafeTransportErrorClass = 'TimeoutError' | 'AbortError' | 'TypeError' | 'Error' | 'Other';
+
+function safeTransportErrorClass(error: unknown): SafeTransportErrorClass {
+  if (error instanceof DOMException) {
+    if (error.name === 'TimeoutError' || error.name === 'AbortError') return error.name;
+    return 'Other';
+  }
+  if (error instanceof TypeError) return 'TypeError';
+  if (error instanceof Error && error.constructor === Error) return 'Error';
+  return 'Other';
+}
+
+function callbackFailure(category: CallbackFailureCategory, status?: number, errorClass?: SafeTransportErrorClass): Response {
   const requestId = crypto.randomUUID().replaceAll('-', '').slice(0, 12);
   // Never log the exception, request URL, or provider response: these can contain
-  // OAuth parameters or credentials. Only a fixed category, HTTP status, and
-  // opaque ID are safe to retain in Pages runtime logs.
-  console.error('pickora_oauth_callback_failure', { category, ...(status === undefined ? {} : { status }), requestId });
+  // OAuth parameters or credentials. Log only fixed diagnostic fields and an
+  // opaque ID; errorClass is selected from a fixed allow-list below.
+  console.error('pickora_oauth_callback_failure', { category, ...(status === undefined ? {} : { status }), ...(errorClass === undefined ? {} : { errorClass }), requestId });
   return json({ error: 'Sign-in could not be completed. Please try again shortly.', requestId }, 503);
 }
 
@@ -131,13 +143,13 @@ async function callback(context: PagesContext): Promise<Response> {
     const code = url.searchParams.get('code') ?? '';
     if (!code || code.length > 512 || !/^[A-Za-z0-9._-]+$/.test(code)) return json({ error: 'GitHub did not return a valid authorization code.' }, 400);
 
-    failureCategory = 'github_code_exchange_transport';
     const tokenBody = new URLSearchParams({
       client_id: config.clientId,
       client_secret: config.clientSecret,
       code,
       redirect_uri: config.callbackUrl.toString(),
     });
+    failureCategory = 'github_code_exchange_transport';
     const tokenResponse = await fetch('https://github.com/login/oauth/access_token', {
       method: 'POST',
       headers: { Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'Pickora-Admin' },
@@ -179,8 +191,9 @@ async function callback(context: PagesContext): Promise<Response> {
       .bind(await sha256(token), String(user.id), user.login, now + 8 * 60 * 60, now).run();
     failureCategory = 'session_response';
     return noStoreRedirect('/admin/', 303, sessionCookie(token));
-  } catch {
-    return callbackFailure(failureCategory, failureStatus);
+  } catch (error) {
+    const errorClass = failureCategory === 'github_code_exchange_transport' ? safeTransportErrorClass(error) : undefined;
+    return callbackFailure(failureCategory, failureStatus, errorClass);
   }
 }
 

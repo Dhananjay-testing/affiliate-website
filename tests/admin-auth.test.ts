@@ -78,6 +78,7 @@ function context(path: string, options: { method?: string; headers?: HeadersInit
   };
 }
 function db(): MemoryD1 { return env.DB as MemoryD1; }
+let loginIpCounter = 10;
 async function withFetch<T>(responder: (url: string, init?: RequestInit) => Response | Promise<Response>, run: () => Promise<T>): Promise<T> {
   const original = globalThis.fetch;
   globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => responder(String(input), init)) as typeof fetch;
@@ -91,7 +92,7 @@ async function captureConsoleError<T>(run: () => Promise<T>): Promise<{ result: 
   finally { console.error = original; }
 }
 async function beginLogin(): Promise<{ state: string; authorizeUrl: URL }> {
-  const response = await handleGitHubOAuth(context('/api/admin/auth/login', { headers: { 'CF-Connecting-IP': '192.0.2.10' } }));
+  const response = await handleGitHubOAuth(context('/api/admin/auth/login', { headers: { 'CF-Connecting-IP': `192.0.2.${loginIpCounter++}` } }));
   assert.equal(response?.status, 302);
   const authorizeUrl = new URL(response!.headers.get('Location')!);
   const state = authorizeUrl.searchParams.get('state')!;
@@ -160,11 +161,38 @@ const tests: Array<[string, () => void | Promise<void>]> = [
     assert.match(body.requestId, /^[A-Fa-f0-9]{12}$/);
     assert.match(body.error, /Sign-in could not be completed/);
     assert.equal(entries.length, 1);
+    assert.deepEqual(entries[0]?.[1], { category: 'github_code_exchange_transport', errorClass: 'Error', requestId: body.requestId });
     const logged = JSON.stringify(entries);
-    assert.match(logged, /github_code_exchange_transport/);
-    assert.match(logged, new RegExp(body.requestId));
     assert.doesNotMatch(logged, new RegExp(`${code}|${state}|server-only-secret|github-access-token-long|provider exception`));
     assert.doesNotMatch(JSON.stringify(body), new RegExp(`${code}|${state}|server-only-secret|github-access-token-long`));
+  }],
+  ['logs a safe TimeoutError class without exposing its message or details', async () => {
+    const { state } = await beginLogin();
+    const { result: response, entries } = await captureConsoleError(() => withFetch(() => {
+      throw new DOMException('private timeout details must not be logged', 'TimeoutError');
+    }, async () => {
+      const result = await handleGitHubOAuth(context(`/api/admin/auth/callback?code=private-timeout-code&state=${state}`, { headers: { 'CF-Connecting-IP': '192.0.2.20' } }));
+      assert.ok(result);
+      return result;
+    }));
+    assert.equal(response.status, 503);
+    const body = await response.json() as { requestId: string };
+    assert.deepEqual(entries[0]?.[1], { category: 'github_code_exchange_transport', errorClass: 'TimeoutError', requestId: body.requestId });
+    assert.doesNotMatch(JSON.stringify(entries), /private-timeout-code|private timeout details|server-only-secret|state/);
+  }],
+  ['maps unknown thrown values to Other without logging custom properties', async () => {
+    const { state } = await beginLogin();
+    const { result: response, entries } = await captureConsoleError(() => withFetch(() => {
+      throw { name: 'credential-bearing-name', code: 'sensitive-code', message: 'private exception detail' };
+    }, async () => {
+      const result = await handleGitHubOAuth(context(`/api/admin/auth/callback?code=private-other-code&state=${state}`, { headers: { 'CF-Connecting-IP': '192.0.2.21' } }));
+      assert.ok(result);
+      return result;
+    }));
+    assert.equal(response.status, 503);
+    const body = await response.json() as { requestId: string };
+    assert.deepEqual(entries[0]?.[1], { category: 'github_code_exchange_transport', errorClass: 'Other', requestId: body.requestId });
+    assert.doesNotMatch(JSON.stringify(entries), /private-other-code|credential-bearing-name|sensitive-code|private exception detail|server-only-secret/);
   }],
   ['logs only the token endpoint status, category, and request ID for non-2xx responses', async () => {
     const { state } = await beginLogin();
