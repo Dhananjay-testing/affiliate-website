@@ -120,7 +120,7 @@ async function createProduct(context: PagesContext, db: D1Database): Promise<Res
   if (parsed.response) return parsed.response;
   const { product, issues } = normalizeProductInput(parsed.data);
   if (!product) return json({ error: 'Please correct the highlighted product details.', issues }, 422);
-  const publicationError = validatePublication(product.status, product.affiliateUrl, context.env.AMAZON_ASSOCIATE_TAG);
+  const publicationError = validatePublication(product.status, product.affiliateUrl, context.env.AMAZON_ASSOCIATE_TAG, context.request);
   if (publicationError) return publicationError;
 
   const idempotencyKey = context.request.headers.get('Idempotency-Key') ?? '';
@@ -164,7 +164,7 @@ async function updateProduct(context: PagesContext, db: D1Database, oldSlug: str
   if (parsed.response) return parsed.response;
   const { product, issues } = normalizeProductInput(parsed.data);
   if (!product) return json({ error: 'Please correct the highlighted product details.', issues }, 422);
-  const publicationError = validatePublication(product.status, product.affiliateUrl, context.env.AMAZON_ASSOCIATE_TAG);
+  const publicationError = validatePublication(product.status, product.affiliateUrl, context.env.AMAZON_ASSOCIATE_TAG, context.request);
   if (publicationError) return publicationError;
   const current = await readProduct(db, oldSlug);
   if (!current) return json({ error: 'This product could not be found.' }, 404);
@@ -182,9 +182,12 @@ async function updateProduct(context: PagesContext, db: D1Database, oldSlug: str
   return json({ product: safeProduct(saved, true) });
 }
 
-function validatePublication(status: 'draft' | 'published', affiliateUrl: string, configuredTag?: string): Response | null {
+function validatePublication(status: 'draft' | 'published', affiliateUrl: string, configuredTag: string | undefined, request: Request): Response | null {
   if (status !== 'published') return null;
   const tag = configuredTag?.trim();
+  const rayId = request.headers.get('cf-ray');
+  const requestId = rayId && /^[\da-f]{16}(?:-[a-z]{3})?$/i.test(rayId) ? rayId : undefined;
+  console.info({ event: 'pickora_publish_tag_check', present: Boolean(tag), ...(requestId ? { requestId } : {}) });
   if (!tag) return json({ error: 'Publishing is not enabled yet. The site owner must configure the confirmed Amazon India tracking tag in Cloudflare first.' }, 503);
   if (!isAmazonSpecialLink(affiliateUrl, tag)) return json({ error: 'The Special Link tracking tag does not match the one configured for this site. Check Associates Central; the link was not published.' }, 422);
   return null;

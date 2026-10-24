@@ -99,6 +99,41 @@ const tests: Array<[string, () => void | Promise<void>]> = [
   assert.equal(response.status, 503);
   assert.match((await response.text()), /confirmed Amazon India tracking tag/i);
 }],
+['logs only tag-presence status and a validated request ID during publishing checks', async () => {
+  const privateTag = 'must-not-appear-in-logs-8492';
+  const logEntries: unknown[][] = [];
+  const originalInfo = console.info;
+  console.info = (...args: Parameters<typeof console.info>) => { logEntries.push(args); };
+  try {
+    const body = JSON.stringify({ ...valid, status: 'published' });
+    const context = makeContext('http://127.0.0.1/api/admin/products', {
+      PICKORA_LOCAL_AUTH: 'true',
+      AMAZON_ASSOCIATE_TAG: privateTag,
+      DB: { prepare() { throw new Error('Database must not be queried before tag validation.'); }, async batch() { throw new Error('Database must not be queried before tag validation.'); } },
+    }, 'POST');
+    context.request = new Request(context.request.url, {
+      method: 'POST',
+      headers: {
+        Origin: 'http://127.0.0.1',
+        'X-Pickora-CSRF': '1',
+        'Idempotency-Key': crypto.randomUUID(),
+        'cf-ray': '0123456789abcdef-SJC',
+      },
+      body,
+    });
+    const response = await handleAdminApi(context);
+    assert.equal(response.status, 422);
+    assert.deepEqual(logEntries, [[{
+      event: 'pickora_publish_tag_check',
+      present: true,
+      requestId: '0123456789abcdef-SJC',
+    }]]);
+    assert.doesNotMatch(JSON.stringify(logEntries), new RegExp(privateTag));
+    assert.doesNotMatch(JSON.stringify(logEntries), /amazon\.in|affiliateUrl|product/i);
+  } finally {
+    console.info = originalInfo;
+  }
+}],
 ['reports a D1 query failure as an error, not a successful empty listing', async () => {
   const failingStatement = { bind() { return this; }, async all() { throw new Error('simulated database outage'); }, async first() { throw new Error('simulated database outage'); }, async run() { throw new Error('simulated database outage'); } };
   const context = makeContext('http://127.0.0.1/api/admin/products', { PICKORA_LOCAL_AUTH: 'true', DB: { prepare() { return failingStatement; }, async batch() { throw new Error('simulated database outage'); } } });
