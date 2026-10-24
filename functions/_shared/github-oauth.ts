@@ -15,6 +15,7 @@ type CallbackFailureCategory =
   | 'github_code_exchange_http'
   | 'github_code_exchange_content_type'
   | 'github_code_exchange_response'
+  | 'github_profile_redirect'
   | 'github_profile_verification'
   | 'session_persistence'
   | 'session_response';
@@ -180,8 +181,12 @@ async function callback(context: PagesContext): Promise<Response> {
     const userResponse = await fetch('https://api.github.com/user', {
       headers: { Accept: 'application/vnd.github+json', Authorization: `Bearer ${tokenData.access_token}`, 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'Pickora-Admin' },
       signal: AbortSignal.timeout(8000),
-      redirect: 'error',
+      redirect: 'manual',
     });
+    if (userResponse.status >= 300 && userResponse.status < 400) {
+      await userResponse.body?.cancel();
+      return callbackFailure('github_profile_redirect', userResponse.status);
+    }
     if (!userResponse.ok) return json({ error: 'GitHub sign-in could not be verified. Please start again.' }, 502);
     const user = await userResponse.json() as { id?: unknown; login?: unknown };
     if (!Number.isSafeInteger(user.id) || typeof user.login !== 'string' || !/^[A-Za-z0-9-]{1,39}$/.test(user.login)) {

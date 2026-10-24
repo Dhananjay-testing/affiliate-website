@@ -232,6 +232,34 @@ const tests: Array<[string, () => void | Promise<void>]> = [
     assert.doesNotMatch(JSON.stringify(entries), /private-redirect-code|redirect-target|server-only-secret|state/);
     assert.doesNotMatch(JSON.stringify(body), /private-redirect-code|redirect-target|server-only-secret|state/);
   }],
+  ['rejects GitHub profile redirects without following the Location target', async () => {
+    const { state } = await beginLogin();
+    const calls: Array<{ url: string; redirect?: RequestRedirect }> = [];
+    const { result: response, entries } = await captureConsoleError(() => withFetch((url, init) => {
+      calls.push({ url, redirect: init?.redirect });
+      if (url === 'https://github.com/login/oauth/access_token') {
+        return Response.json({ access_token: 'github-access-token-long', token_type: 'bearer' });
+      }
+      if (url === 'https://api.github.com/user') {
+        return new Response(null, { status: 307, headers: { Location: 'https://redirect-target.invalid/should-not-be-requested' } });
+      }
+      throw new Error('unexpected fetch target');
+    }, async () => {
+      const result = await handleGitHubOAuth(context(`/api/admin/auth/callback?code=private-profile-redirect-code&state=${state}`, { headers: { 'CF-Connecting-IP': '192.0.2.23' } }));
+      assert.ok(result);
+      return result;
+    }));
+    assert.equal(response.status, 503);
+    const body = await response.json() as { requestId: string };
+    assert.deepEqual(calls, [
+      { url: 'https://github.com/login/oauth/access_token', redirect: 'manual' },
+      { url: 'https://api.github.com/user', redirect: 'manual' },
+    ]);
+    assert.equal(entries.length, 1);
+    assert.deepEqual(entries[0]?.[1], { category: 'github_profile_redirect', status: 307, requestId: body.requestId });
+    assert.doesNotMatch(JSON.stringify(entries), /private-profile-redirect-code|redirect-target|server-only-secret|github-access-token-long|state/);
+    assert.doesNotMatch(JSON.stringify(body), /private-profile-redirect-code|redirect-target|server-only-secret|github-access-token-long|state/);
+  }],
   ['safely diagnoses unexpected token response content type without reading or logging its body', async () => {
     const { state } = await beginLogin();
     const { result: response, entries } = await captureConsoleError(() => withFetch(() => new Response(
