@@ -10,17 +10,20 @@ const RATE_LIMIT = 10;
 type CallbackFailureCategory =
   | 'rate_limit_check'
   | 'state_validation'
-  | 'github_code_exchange'
+  | 'github_code_exchange_transport'
+  | 'github_code_exchange_http'
+  | 'github_code_exchange_content_type'
+  | 'github_code_exchange_response'
   | 'github_profile_verification'
   | 'session_persistence'
   | 'session_response';
 
-function callbackFailure(category: CallbackFailureCategory): Response {
+function callbackFailure(category: CallbackFailureCategory, status?: number): Response {
   const requestId = crypto.randomUUID().replaceAll('-', '').slice(0, 12);
   // Never log the exception, request URL, or provider response: these can contain
-  // OAuth parameters or credentials. The fixed category and opaque ID are enough
-  // to locate the failing stage in Pages runtime logs.
-  console.error('pickora_oauth_callback_failure', { category, requestId });
+  // OAuth parameters or credentials. Only a fixed category, HTTP status, and
+  // opaque ID are safe to retain in Pages runtime logs.
+  console.error('pickora_oauth_callback_failure', { category, ...(status === undefined ? {} : { status }), requestId });
   return json({ error: 'Sign-in could not be completed. Please try again shortly.', requestId }, 503);
 }
 
@@ -117,6 +120,7 @@ async function callback(context: PagesContext): Promise<Response> {
   const db = context.env.DB;
   if (!db) return json({ error: 'Admin database is not connected.' }, 503);
   let failureCategory: CallbackFailureCategory = 'rate_limit_check';
+  let failureStatus: number | undefined;
   try {
     if (!await allowAttempt(context, 'callback')) return json({ error: 'Too many sign-in attempts. Wait 15 minutes and try again.' }, 429, { 'Retry-After': String(RATE_WINDOW_SECONDS) });
     const url = new URL(context.request.url);
@@ -127,20 +131,34 @@ async function callback(context: PagesContext): Promise<Response> {
     const code = url.searchParams.get('code') ?? '';
     if (!code || code.length > 512 || !/^[A-Za-z0-9._-]+$/.test(code)) return json({ error: 'GitHub did not return a valid authorization code.' }, 400);
 
-    failureCategory = 'github_code_exchange';
+    failureCategory = 'github_code_exchange_transport';
+    const tokenBody = new URLSearchParams({
+      client_id: config.clientId,
+      client_secret: config.clientSecret,
+      code,
+      redirect_uri: config.callbackUrl.toString(),
+    });
     const tokenResponse = await fetch('https://github.com/login/oauth/access_token', {
       method: 'POST',
-      headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'User-Agent': 'Pickora-Admin' },
-      body: JSON.stringify({ client_id: config.clientId, client_secret: config.clientSecret, code, redirect_uri: config.callbackUrl.toString() }),
+      headers: { Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'Pickora-Admin' },
+      body: tokenBody.toString(),
       signal: AbortSignal.timeout(8000),
       redirect: 'error',
     });
-    if (!tokenResponse.ok) return json({ error: 'GitHub sign-in could not be verified. Please start again.' }, 502);
+    failureStatus = tokenResponse.status;
+    if (!tokenResponse.ok) return callbackFailure('github_code_exchange_http', failureStatus);
+    failureCategory = 'github_code_exchange_content_type';
+    const contentType = tokenResponse.headers.get('Content-Type')?.split(';', 1)[0]?.trim().toLowerCase();
+    if (contentType !== 'application/json' && !contentType?.endsWith('+json')) {
+      return callbackFailure('github_code_exchange_content_type', failureStatus);
+    }
+    failureCategory = 'github_code_exchange_response';
     const tokenData = await tokenResponse.json() as { access_token?: unknown; token_type?: unknown; scope?: unknown; error?: unknown };
     if (typeof tokenData.access_token !== 'string' || tokenData.access_token.length < 10 || tokenData.access_token.length > 4096 || tokenData.token_type !== 'bearer') {
-      return json({ error: 'GitHub sign-in could not be verified. Please start again.' }, 401);
+      return callbackFailure('github_code_exchange_response', failureStatus);
     }
 
+    failureStatus = undefined;
     failureCategory = 'github_profile_verification';
     const userResponse = await fetch('https://api.github.com/user', {
       headers: { Accept: 'application/vnd.github+json', Authorization: `Bearer ${tokenData.access_token}`, 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'Pickora-Admin' },
@@ -162,7 +180,7 @@ async function callback(context: PagesContext): Promise<Response> {
     failureCategory = 'session_response';
     return noStoreRedirect('/admin/', 303, sessionCookie(token));
   } catch {
-    return callbackFailure(failureCategory);
+    return callbackFailure(failureCategory, failureStatus);
   }
 }
 

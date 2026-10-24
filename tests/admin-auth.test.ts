@@ -104,7 +104,14 @@ const tests: Array<[string, () => void | Promise<void>]> = [
     await withFetch(async (url, init) => {
       if (url === 'https://github.com/login/oauth/access_token') {
         assert.equal(init?.method, 'POST');
-        assert.match(String(init?.body), /server-only-secret/);
+        const headers = new Headers(init?.headers);
+        assert.equal(headers.get('Accept'), 'application/json');
+        assert.equal(headers.get('Content-Type'), 'application/x-www-form-urlencoded');
+        const body = new URLSearchParams(String(init?.body));
+        assert.equal(body.get('client_id'), 'test-client-id');
+        assert.equal(body.get('client_secret'), 'server-only-secret');
+        assert.equal(body.get('redirect_uri'), `${origin}/api/admin/auth/callback`);
+        assert.ok(body.has('code'));
         return Response.json({ access_token: 'github-access-token-long', token_type: 'bearer', scope: '' });
       }
       assert.equal(url, 'https://api.github.com/user');
@@ -154,10 +161,58 @@ const tests: Array<[string, () => void | Promise<void>]> = [
     assert.match(body.error, /Sign-in could not be completed/);
     assert.equal(entries.length, 1);
     const logged = JSON.stringify(entries);
-    assert.match(logged, /github_code_exchange/);
+    assert.match(logged, /github_code_exchange_transport/);
     assert.match(logged, new RegExp(body.requestId));
     assert.doesNotMatch(logged, new RegExp(`${code}|${state}|server-only-secret|github-access-token-long|provider exception`));
     assert.doesNotMatch(JSON.stringify(body), new RegExp(`${code}|${state}|server-only-secret|github-access-token-long`));
+  }],
+  ['logs only the token endpoint status, category, and request ID for non-2xx responses', async () => {
+    const { state } = await beginLogin();
+    const { result: response, entries } = await captureConsoleError(() => withFetch(() => new Response(
+      JSON.stringify({ error: 'incorrect_client_credentials', error_description: 'sensitive provider response must not be logged' }),
+      { status: 401, headers: { 'Content-Type': 'application/json' } },
+    ), async () => {
+      const result = await handleGitHubOAuth(context(`/api/admin/auth/callback?code=private-code&state=${state}`, { headers: { 'CF-Connecting-IP': '192.0.2.17' } }));
+      assert.ok(result);
+      return result;
+    }));
+    assert.equal(response.status, 503);
+    const body = await response.json() as { requestId: string };
+    assert.equal(entries.length, 1);
+    assert.deepEqual(entries[0]?.[1], { category: 'github_code_exchange_http', status: 401, requestId: body.requestId });
+    assert.doesNotMatch(JSON.stringify(entries), /private-code|sensitive provider response|server-only-secret|state/);
+  }],
+  ['safely diagnoses unexpected token response content type without reading or logging its body', async () => {
+    const { state } = await beginLogin();
+    const { result: response, entries } = await captureConsoleError(() => withFetch(() => new Response(
+      'private provider body must not be logged',
+      { status: 200, headers: { 'Content-Type': 'text/plain' } },
+    ), async () => {
+      const result = await handleGitHubOAuth(context(`/api/admin/auth/callback?code=private-code&state=${state}`, { headers: { 'CF-Connecting-IP': '192.0.2.18' } }));
+      assert.ok(result);
+      return result;
+    }));
+    assert.equal(response.status, 503);
+    const body = await response.json() as { requestId: string };
+    assert.equal(entries.length, 1);
+    assert.deepEqual(entries[0]?.[1], { category: 'github_code_exchange_content_type', status: 200, requestId: body.requestId });
+    assert.doesNotMatch(JSON.stringify(entries), /private-code|private provider body|server-only-secret/);
+  }],
+  ['reports malformed JSON token responses with status but without response content', async () => {
+    const { state } = await beginLogin();
+    const { result: response, entries } = await captureConsoleError(() => withFetch(() => new Response(
+      'private malformed response body',
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
+    ), async () => {
+      const result = await handleGitHubOAuth(context(`/api/admin/auth/callback?code=private-code&state=${state}`, { headers: { 'CF-Connecting-IP': '192.0.2.19' } }));
+      assert.ok(result);
+      return result;
+    }));
+    assert.equal(response.status, 503);
+    const body = await response.json() as { requestId: string };
+    assert.equal(entries.length, 1);
+    assert.deepEqual(entries[0]?.[1], { category: 'github_code_exchange_response', status: 200, requestId: body.requestId });
+    assert.doesNotMatch(JSON.stringify(entries), /private-code|private malformed response|server-only-secret/);
   }],
   ['identifies a D1 session-write failure without logging exception details', async () => {
     const { state } = await beginLogin();
