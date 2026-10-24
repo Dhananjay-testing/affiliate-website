@@ -11,6 +11,7 @@ type CallbackFailureCategory =
   | 'rate_limit_check'
   | 'state_validation'
   | 'github_code_exchange_transport'
+  | 'github_code_exchange_redirect'
   | 'github_code_exchange_http'
   | 'github_code_exchange_content_type'
   | 'github_code_exchange_response'
@@ -155,9 +156,13 @@ async function callback(context: PagesContext): Promise<Response> {
       headers: { Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'Pickora-Admin' },
       body: tokenBody.toString(),
       signal: AbortSignal.timeout(8000),
-      redirect: 'error',
+      redirect: 'manual',
     });
     failureStatus = tokenResponse.status;
+    if (failureStatus >= 300 && failureStatus < 400) {
+      await tokenResponse.body?.cancel();
+      return callbackFailure('github_code_exchange_redirect', failureStatus);
+    }
     if (!tokenResponse.ok) return callbackFailure('github_code_exchange_http', failureStatus);
     failureCategory = 'github_code_exchange_content_type';
     const contentType = tokenResponse.headers.get('Content-Type')?.split(';', 1)[0]?.trim().toLowerCase();

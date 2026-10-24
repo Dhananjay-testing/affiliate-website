@@ -210,6 +210,28 @@ const tests: Array<[string, () => void | Promise<void>]> = [
     assert.deepEqual(entries[0]?.[1], { category: 'github_code_exchange_http', status: 401, requestId: body.requestId });
     assert.doesNotMatch(JSON.stringify(entries), /private-code|sensitive provider response|server-only-secret|state/);
   }],
+  ['rejects token endpoint redirects without following the Location target', async () => {
+    const { state } = await beginLogin();
+    const calls: Array<{ url: string; redirect?: RequestRedirect }> = [];
+    const { result: response, entries } = await captureConsoleError(() => withFetch((url, init) => {
+      calls.push({ url, redirect: init?.redirect });
+      if (url === 'https://github.com/login/oauth/access_token') {
+        return new Response(null, { status: 302, headers: { Location: 'https://redirect-target.invalid/should-not-be-requested' } });
+      }
+      throw new Error('unexpected fetch target');
+    }, async () => {
+      const result = await handleGitHubOAuth(context(`/api/admin/auth/callback?code=private-redirect-code&state=${state}`, { headers: { 'CF-Connecting-IP': '192.0.2.22' } }));
+      assert.ok(result);
+      return result;
+    }));
+    assert.equal(response.status, 503);
+    const body = await response.json() as { requestId: string };
+    assert.deepEqual(calls, [{ url: 'https://github.com/login/oauth/access_token', redirect: 'manual' }]);
+    assert.equal(entries.length, 1);
+    assert.deepEqual(entries[0]?.[1], { category: 'github_code_exchange_redirect', status: 302, requestId: body.requestId });
+    assert.doesNotMatch(JSON.stringify(entries), /private-redirect-code|redirect-target|server-only-secret|state/);
+    assert.doesNotMatch(JSON.stringify(body), /private-redirect-code|redirect-target|server-only-secret|state/);
+  }],
   ['safely diagnoses unexpected token response content type without reading or logging its body', async () => {
     const { state } = await beginLogin();
     const { result: response, entries } = await captureConsoleError(() => withFetch(() => new Response(
