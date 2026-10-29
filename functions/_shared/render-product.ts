@@ -1,5 +1,5 @@
 import { isAmazonSpecialLink } from './product-validation';
-import { productImagePath } from '../../src/lib/product-image-url';
+import { productImageUrl } from '../../src/lib/product-image-url';
 
 export interface PublicProductRow {
   slug: string; name: string; category: string; description: string;
@@ -22,7 +22,7 @@ function listHtml(items: string[]): string {
 
 export function renderProductCard(row: PublicProductRow, expectedTag?: string): string | null {
   if (!expectedTag || !isAmazonSpecialLink(row.affiliate_url, expectedTag)) return null;
-  const imageUrl = productImagePath(row.image_url);
+  const imageUrl = productImageUrl(row.image_url, row.name);
   const image = imageUrl
     ? `<img src="${imageUrl}" alt="Product image for ${escapeHtml(row.name)}" data-product-image><span aria-hidden="true" hidden>✳</span>`
     : '<span aria-hidden="true">✳</span>';

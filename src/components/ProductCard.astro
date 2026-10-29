@@ -1,9 +1,9 @@
 ---
 import type { Product } from '../data/products';
 import { site } from '../config/site';
-import { productImagePath } from '../lib/product-image-url';
+import { productImageUrl } from '../lib/product-image-url';
 const { product } = Astro.props as { product: Product };
-const imageUrl = productImagePath(product.image);
+const imageUrl = productImageUrl(product.image, product.name);
 ---
 <article class="product-card">
   <div class="product-placeholder">{imageUrl ? <><img src={imageUrl} alt={product.imageAlt || `Product image for ${product.name}`} data-product-image /><span aria-hidden="true" hidden>✳</span></> : <span aria-hidden="true">✳</span>}</div>

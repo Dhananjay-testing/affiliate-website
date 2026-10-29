@@ -1,7 +1,7 @@
 import type { PagesHandler } from '../_shared/types';
 import { json } from '../_shared/types';
 import { isAmazonSpecialLink } from '../_shared/product-validation';
-import { productImagePath } from '../../src/lib/product-image-url';
+import { productImageUrl } from '../../src/lib/product-image-url';
 
 export const onRequest: PagesHandler = async ({ request, env }) => {
   if (request.method !== 'GET') return json({ error: 'Method not allowed.' }, 405, { Allow: 'GET' });
@@ -21,7 +21,7 @@ export const onRequest: PagesHandler = async ({ request, env }) => {
       limitations: JSON.parse(row.limitations ?? '[]') as string[],
       affiliateUrl: row.affiliate_url,
       retailer: 'Amazon India',
-      imageUrl: productImagePath(row.image_url),
+      imageUrl: productImageUrl(row.image_url, row.name),
     }));
     return json(products, 200, { 'Cache-Control': 'no-store' });
   } catch {

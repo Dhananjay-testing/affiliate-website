@@ -1,4 +1,4 @@
-import { productImagePath } from '../lib/product-image-url';
+import { productImageUrl } from '../lib/product-image-url';
 
 interface PublicProduct {
   slug: string;
@@ -26,7 +26,7 @@ function makeElement(tag: string, text?: string, className?: string): HTMLElemen
 function makeProductCard(product: PublicProduct): HTMLElement {
   const card = makeElement('article', undefined, 'product-card');
   const art = makeElement('div', undefined, 'product-placeholder');
-  const imageUrl = productImagePath(product.imageUrl);
+  const imageUrl = productImageUrl(product.imageUrl, product.name);
   if (imageUrl) {
     const image = document.createElement('img');
     image.src = imageUrl;

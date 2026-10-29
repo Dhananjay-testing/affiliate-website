@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { isAllowedAmazonUrl, isAmazonSpecialLink, normalizeProductInput, slugify } from '../functions/_shared/product-validation';
 import { handleAdminApi } from '../functions/_shared/admin-api';
 import { renderProductCard } from '../functions/_shared/render-product';
+import { productImageUrl } from '../src/lib/product-image-url';
 import type { PagesContext } from '../functions/_shared/types';
 
 const valid = {
@@ -71,6 +72,18 @@ const tests: Array<[string, () => void | Promise<void>]> = [
   const invalid = renderProductCard({ slug: 'example-product', name: 'Example product', category: 'Electronics', description: 'Owner supplied description.', key_features: '[]', intended_use: 'Owner supplied use.', benefits: '[]', limitations: '[]', affiliate_url: valid.affiliateUrl, image_url: 'https://unapproved.example/file.png' }, 'local-test');
   assert.match(invalid ?? '', /class="product-placeholder"><span aria-hidden="true">✳<\/span>/);
   assert.doesNotMatch(invalid ?? '', /unapproved\.example/);
+}],
+
+['allows the exact Amazon image only as a Samsung Galaxy M47 5G override', () => {
+  const amazonImage = 'https://m.media-amazon.com/images/I/71ZhfgiBUbL._SL1500_.jpg';
+  assert.equal(productImageUrl(null, 'Samsung Galaxy M47 5G'), amazonImage);
+  assert.equal(productImageUrl('https://unapproved.example/image.jpg', 'Samsung Galaxy M47 5G'), amazonImage);
+  assert.equal(productImageUrl(amazonImage, 'Another product'), null);
+  assert.equal(productImageUrl('https://unapproved.example/image.jpg', 'Another product'), null);
+  assert.equal(productImageUrl('/api/product-images/123e4567-e89b-42d3-a456-426614174000', 'Samsung Galaxy M47 5G'), '/api/product-images/123e4567-e89b-42d3-a456-426614174000');
+  const card = renderProductCard({ slug: 'samsung-galaxy-m47-5g', name: 'Samsung Galaxy M47 5G', category: 'Electronics', description: 'Owner supplied description.', key_features: '[]', intended_use: 'Owner supplied use.', benefits: '[]', limitations: '[]', affiliate_url: valid.affiliateUrl, image_url: null }, 'local-test');
+  assert.match(card ?? '', /src="https:\/\/m\.media-amazon\.com\/images\/I\/71ZhfgiBUbL\._SL1500_\.jpg"/);
+  assert.match(card ?? '', /data-product-image><span aria-hidden="true" hidden>✳<\/span>/);
 }],
 
 ['requires owner-supplied features, benefits, limitations, and a supported category', () => {
