@@ -2,7 +2,7 @@ import { categories } from '../../src/data/categories';
 import { renderProductCards, type PublicProductRow } from '../_shared/render-product';
 import type { PagesHandler } from '../_shared/types';
 
-const columns = 'slug, name, category, description, key_features, intended_use, benefits, limitations, affiliate_url';
+const columns = 'slug, name, category, description, key_features, intended_use, benefits, limitations, affiliate_url, image_url';
 
 export const onRequest: PagesHandler = async (context) => {
   const asset = await context.next();

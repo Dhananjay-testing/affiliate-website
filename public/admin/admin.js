@@ -8,6 +8,11 @@ let products = [];
 let categories = [];
 let editingSlug = '';
 let submissionKey = crypto.randomUUID();
+let imageAction = 'none';
+let previewObjectUrl = '';
+const imageFileInput = document.querySelector('#image-file');
+const currentImage = document.querySelector('#current-image');
+const imagePreview = document.querySelector('#image-preview');
 
 function showNotice(message, kind = 'success') {
   notice.textContent = message;
@@ -70,6 +75,13 @@ function button(label, action, slug) {
 
 function resetForm() {
   form.reset();
+  if (previewObjectUrl) URL.revokeObjectURL(previewObjectUrl);
+  previewObjectUrl = '';
+  imageAction = 'none';
+  currentImage.hidden = true;
+  currentImage.querySelector('img').removeAttribute('src');
+  imagePreview.hidden = true;
+  imagePreview.querySelector('img').removeAttribute('src');
   editingSlug = '';
   submissionKey = crypto.randomUUID();
   document.querySelector('#editor-heading').textContent = 'Add a product';
@@ -113,14 +125,27 @@ function showIssues(issues) {
 
 async function submit(statusOverride) {
   const body = formData(statusOverride);
+  if (imageAction === 'upload' && !imageFileInput.files?.[0]) {
+    showNotice('Choose an image file or clear the image selection.', 'error');
+    imageFileInput.focus();
+    return;
+  }
   showIssues([]);
   setBusy(true, editingSlug ? 'Saving changes…' : 'Saving product…');
   try {
     let result;
+    let requestBody = JSON.stringify(body);
+    if (imageAction === 'upload' || imageAction === 'remove') {
+      const multipart = new FormData();
+      multipart.set('product', JSON.stringify(body));
+      multipart.set('imageAction', imageAction);
+      if (imageAction === 'upload') multipart.set('image', imageFileInput.files[0]);
+      requestBody = multipart;
+    }
     if (editingSlug) {
-      result = await api(`/api/admin/products/${encodeURIComponent(editingSlug)}`, { method: 'PUT', body: JSON.stringify(body) });
+      result = await api(`/api/admin/products/${encodeURIComponent(editingSlug)}`, { method: 'PUT', body: requestBody });
     } else {
-      result = await api('/api/admin/products', { method: 'POST', headers: { 'Idempotency-Key': submissionKey }, body: JSON.stringify(body) });
+      result = await api('/api/admin/products', { method: 'POST', headers: { 'Idempotency-Key': submissionKey }, body: requestBody });
     }
     showNotice(result.duplicate ? 'This submission was already saved. No duplicate was created.' : body.status === 'published' ? 'Product published. It will appear on the product page and in its category.' : 'Draft saved. It is visible only in this dashboard.');
     resetForm();
@@ -157,6 +182,10 @@ function editProduct(slug) {
   form.elements.productUrl.value = product.productUrl;
   form.elements.affiliateUrl.value = product.affiliateUrl;
   form.elements.status.value = product.status;
+  imageAction = 'keep';
+  currentImage.hidden = !product.imageUrl;
+  if (product.imageUrl) currentImage.querySelector('img').src = product.imageUrl;
+  imagePreview.hidden = true;
   document.querySelector('#editor-heading').textContent = 'Edit product';
   document.querySelector('#cancel-edit').hidden = false;
   saveButton.textContent = product.status === 'published' ? 'Save changes' : 'Save changes';
@@ -174,6 +203,7 @@ async function changeStatus(product) {
     affiliateUrl: product.affiliateUrl,
     status: nextStatus,
   };
+  delete body.imageUrl;
   try {
     await api(`/api/admin/products/${encodeURIComponent(product.slug)}`, { method: 'PUT', body: JSON.stringify(body) });
     showNotice(action === 'publish' ? 'Product published.' : 'Product unpublished and removed from public listings.');
@@ -194,6 +224,36 @@ async function removeProduct(product) {
 }
 
 form.addEventListener('submit', (event) => { event.preventDefault(); void submit(); });
+imageFileInput.addEventListener('change', () => {
+  const file = imageFileInput.files?.[0];
+  if (!file) {
+    imageAction = editingSlug ? 'keep' : 'none';
+    imagePreview.hidden = true;
+    return;
+  }
+  imageAction = 'upload';
+  if (previewObjectUrl) URL.revokeObjectURL(previewObjectUrl);
+  previewObjectUrl = URL.createObjectURL(file);
+  imagePreview.querySelector('img').src = previewObjectUrl;
+  imagePreview.hidden = false;
+});
+document.querySelector('#clear-image').addEventListener('click', () => {
+  imageFileInput.value = '';
+  if (previewObjectUrl) URL.revokeObjectURL(previewObjectUrl);
+  previewObjectUrl = '';
+  imagePreview.hidden = true;
+  imagePreview.querySelector('img').removeAttribute('src');
+  imageAction = editingSlug ? 'keep' : 'none';
+});
+document.querySelector('#remove-image').addEventListener('click', () => {
+  imageFileInput.value = '';
+  if (previewObjectUrl) URL.revokeObjectURL(previewObjectUrl);
+  previewObjectUrl = '';
+  imagePreview.hidden = true;
+  currentImage.hidden = true;
+  imageAction = 'remove';
+  showNotice('The image will be removed when you save the product.', 'warning');
+});
 saveDraftButton.addEventListener('click', () => { form.elements.status.value = 'draft'; void submit('draft'); });
 document.querySelector('#cancel-edit').addEventListener('click', resetForm);
 document.querySelector('#refresh-list').addEventListener('click', () => void refreshProducts());

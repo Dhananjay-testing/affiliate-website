@@ -1,3 +1,5 @@
+import { productImagePath } from '../lib/product-image-url';
+
 interface PublicProduct {
   slug: string;
   name: string;
@@ -9,6 +11,7 @@ interface PublicProduct {
   limitations: string[];
   affiliateUrl: string;
   retailer: string;
+  imageUrl?: string | null;
 }
 
 const disclosure = 'Affiliate link: We may earn a commission from qualifying purchases.';
@@ -23,7 +26,22 @@ function makeElement(tag: string, text?: string, className?: string): HTMLElemen
 function makeProductCard(product: PublicProduct): HTMLElement {
   const card = makeElement('article', undefined, 'product-card');
   const art = makeElement('div', undefined, 'product-placeholder');
-  art.append(makeElement('span', '✳'));
+  const imageUrl = productImagePath(product.imageUrl);
+  if (imageUrl) {
+    const image = document.createElement('img');
+    image.src = imageUrl;
+    image.alt = `Product image for ${product.name}`;
+    image.dataset.productImage = '';
+    art.append(image);
+    const fallback = makeElement('span', '✳');
+    fallback.setAttribute('aria-hidden', 'true');
+    fallback.hidden = true;
+    art.append(fallback);
+  } else {
+    const fallback = makeElement('span', '✳');
+    fallback.setAttribute('aria-hidden', 'true');
+    art.append(fallback);
+  }
   const body = makeElement('div', undefined, 'product-card-body');
   body.append(makeElement('p', product.category, 'eyebrow'), makeElement('h3', product.name), makeElement('p', product.description));
   const intended = makeElement('p', undefined, 'product-note');
@@ -55,6 +73,14 @@ function makeProductCard(product: PublicProduct): HTMLElement {
   card.append(art, body);
   return card;
 }
+
+document.addEventListener('error', (event) => {
+  const image = event.target;
+  if (!(image instanceof HTMLImageElement) || !image.matches('[data-product-image]')) return;
+  image.hidden = true;
+  const fallback = image.parentElement?.querySelector<HTMLElement>('span[aria-hidden="true"]');
+  if (fallback) fallback.hidden = false;
+}, true);
 
 function showFeedError(container: HTMLElement, message: string) {
   const status = makeElement('p', message, 'feed-status');

@@ -1,6 +1,8 @@
 import { categories } from '../../src/data/categories';
 import { getIdentity, requireSameOrigin } from './auth';
 import { isAmazonSpecialLink, normalizeProductInput, slugify } from './product-validation';
+import { MAX_PRODUCT_IMAGE_BYTES, normalizeProductImage, ProductImageError } from './product-images';
+import { productImagePath } from '../../src/lib/product-image-url';
 import type { D1Database, PagesContext } from './types';
 import { json } from './types';
 
@@ -8,6 +10,7 @@ interface ProductRow {
   id: string; slug: string; name: string; category: string; description: string;
   key_features: string; intended_use: string; benefits: string; limitations: string;
   product_url: string; affiliate_url: string; status: 'draft' | 'published';
+  image_url: string | null;
   created_at: string; updated_at: string; published_at: string | null;
 }
 
@@ -24,6 +27,7 @@ function safeProduct(row: ProductRow, includeAdmin: boolean) {
     limitations: JSON.parse(row.limitations) as string[],
     affiliateUrl: row.affiliate_url,
     retailer: 'Amazon India',
+    imageUrl: productImagePath(row.image_url),
   };
   return includeAdmin ? { ...item, productUrl: row.product_url, status: row.status, createdAt: row.created_at, updatedAt: row.updated_at, publishedAt: row.published_at } : item;
 }
@@ -46,6 +50,92 @@ async function readJson(request: Request): Promise<{ data?: unknown; response?: 
   } catch {
     return { response: json({ error: 'Send a valid JSON request.' }, 400) };
   }
+}
+
+interface ProductSubmission { data: unknown; imageAction: 'none' | 'keep' | 'remove' | 'upload'; imageFile?: File; }
+const MAX_MULTIPART_BYTES = MAX_PRODUCT_IMAGE_BYTES + 40_000;
+
+async function readBoundedBody(request: Request, limit: number): Promise<Uint8Array | Response> {
+  const contentLength = Number(request.headers.get('Content-Length') ?? 0);
+  if (contentLength > limit) return json({ error: 'The submitted image or details are too large.' }, 413);
+  if (!request.body) return new Uint8Array();
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > limit) {
+        await reader.cancel();
+        return json({ error: 'The submitted image or details are too large.' }, 413);
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const output = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) { output.set(chunk, offset); offset += chunk.byteLength; }
+  return output;
+}
+
+async function readProductSubmission(request: Request): Promise<{ submission?: ProductSubmission; response?: Response }> {
+  const contentType = request.headers.get('Content-Type') ?? '';
+  if (!contentType.toLowerCase().startsWith('multipart/form-data')) {
+    const parsed = await readJson(request);
+    return parsed.response ? { response: parsed.response } : { submission: { data: parsed.data, imageAction: 'none' } };
+  }
+  const bytes = await readBoundedBody(request, MAX_MULTIPART_BYTES);
+  if (bytes instanceof Response) return { response: bytes };
+  try {
+    const bodyBytes = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+    const form = await new Request('https://pickora.invalid/', { method: 'POST', headers: { 'Content-Type': contentType }, body: bodyBytes }).formData();
+    for (const name of form.keys()) {
+      if (!['product', 'imageAction', 'image'].includes(name) || form.getAll(name).length !== 1) return { response: json({ error: 'The image form contains unexpected fields.' }, 400) };
+    }
+    const data = form.get('product');
+    if (typeof data !== 'string') return { response: json({ error: 'The product details could not be read.' }, 400) };
+    const rawAction = form.get('imageAction');
+    const imageAction = rawAction === 'upload' || rawAction === 'remove' || rawAction === 'keep' ? rawAction : null;
+    if (!imageAction) return { response: json({ error: 'Choose whether to keep, replace, or remove the current image.' }, 400) };
+    const fileValue = form.get('image');
+    const imageFile = fileValue instanceof File && fileValue.size > 0 ? fileValue : undefined;
+    if (imageAction === 'upload' && !imageFile) return { response: json({ error: 'Choose a JPG, PNG, or WebP image to upload.' }, 422) };
+    if (imageAction !== 'upload' && imageFile) return { response: json({ error: 'The image selection changed. Refresh the form and try again.' }, 400) };
+    if (imageFile && imageFile.size > MAX_PRODUCT_IMAGE_BYTES) return { response: json({ error: 'Choose an image no larger than 1 MiB.' }, 413) };
+    let parsed: unknown;
+    try { parsed = JSON.parse(data) as unknown; } catch { return { response: json({ error: 'Send valid product details.' }, 400) }; }
+    return { submission: { data: parsed, imageAction, ...(imageFile ? { imageFile } : {}) } };
+  } catch {
+    return { response: json({ error: 'Send a valid image form.' }, 400) };
+  }
+}
+
+async function storeImage(context: PagesContext, file: File | undefined): Promise<{ path: string; key: string } | Response | null> {
+  if (!file) return null;
+  const storage = context.env.PRODUCT_IMAGES;
+  if (!storage) return json({ error: 'Image storage is not connected. Ask the site owner to configure the PRODUCT_IMAGES binding.' }, 503);
+  try {
+    const normalized = normalizeProductImage(new Uint8Array(await file.arrayBuffer()), file.type);
+    const id = crypto.randomUUID();
+    const key = `product-images:${id}`;
+    await storage.put(key, normalized.bytes);
+    return { key, path: `/api/product-images/${id}` };
+  } catch (error) {
+    if (error instanceof ProductImageError) return json({ error: error.message }, 422);
+    return json({ error: 'The image could not be processed or stored. No product update was recorded.' }, 503);
+  }
+}
+
+async function removeNewImageIfUnreferenced(context: PagesContext, db: D1Database, stored: { path: string; key: string } | null | undefined): Promise<void> {
+  if (!stored || !context.env.PRODUCT_IMAGES) return;
+  try {
+    const reference = await db.prepare('SELECT id FROM products WHERE image_url = ? LIMIT 1').bind(stored.path).first<{ id: string }>();
+    if (!reference) await context.env.PRODUCT_IMAGES.delete(stored.key);
+  } catch { /* Safe orphan is preferable to deleting an object with an uncertain reference. */ }
 }
 
 function requireDb(context: PagesContext): D1Database | Response {
@@ -116,9 +206,11 @@ export async function handleAdminApi(context: PagesContext): Promise<Response> {
 }
 
 async function createProduct(context: PagesContext, db: D1Database): Promise<Response> {
-  const parsed = await readJson(context.request);
+  const parsed = await readProductSubmission(context.request);
   if (parsed.response) return parsed.response;
-  const { product, issues } = normalizeProductInput(parsed.data);
+  const submission = parsed.submission!;
+  if (submission.imageAction === 'remove' || submission.imageAction === 'keep') return json({ error: 'A new product does not have an existing image to keep or remove.' }, 400);
+  const { product, issues } = normalizeProductInput(submission.data);
   if (!product) return json({ error: 'Please correct the highlighted product details.', issues }, 422);
   const publicationError = validatePublication(product.status, product.affiliateUrl, context.env.AMAZON_ASSOCIATE_TAG, context.request);
   if (publicationError) return publicationError;
@@ -135,17 +227,21 @@ async function createProduct(context: PagesContext, db: D1Database): Promise<Res
   if (!slug) return json({ error: 'This name cannot be used to make a product URL. Add a letter or number.' }, 422);
   if (await readProduct(db, slug)) return json({ error: 'A product with this name already exists. Add a distinguishing word to the product name.' }, 409);
 
+  const storedImage = await storeImage(context, submission.imageFile);
+  if (storedImage instanceof Response) return storedImage;
+
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
   const publishedAt = product.status === 'published' ? now : null;
   try {
     const batchResults = await db.batch([
       db.prepare('INSERT INTO products (id, slug, name, category, description, key_features, intended_use, benefits, limitations, product_url, affiliate_url, image_url, status, created_at, updated_at, published_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-        .bind(id, slug, product.name, product.category, product.description, JSON.stringify(product.keyFeatures), product.intendedUse, JSON.stringify(product.benefits), JSON.stringify(product.limitations), product.productUrl, product.affiliateUrl, null, product.status, now, now, publishedAt),
+        .bind(id, slug, product.name, product.category, product.description, JSON.stringify(product.keyFeatures), product.intendedUse, JSON.stringify(product.benefits), JSON.stringify(product.limitations), product.productUrl, product.affiliateUrl, storedImage?.path ?? null, product.status, now, now, publishedAt),
       db.prepare('INSERT INTO product_submissions (idempotency_key, product_id, created_at) VALUES (?, ?, ?)').bind(idempotencyKey, id, now),
     ]);
     if (batchResults.some((result) => !result.success)) throw new Error('database batch was not successful');
   } catch {
+    await removeNewImageIfUnreferenced(context, db, storedImage);
     const retry = await db.prepare('SELECT product_id FROM product_submissions WHERE idempotency_key = ?').bind(idempotencyKey).first<{ product_id: string }>();
     if (retry) {
       const saved = await db.prepare('SELECT * FROM products WHERE id = ?').bind(retry.product_id).first<ProductRow>();
@@ -160,9 +256,10 @@ async function createProduct(context: PagesContext, db: D1Database): Promise<Res
 }
 
 async function updateProduct(context: PagesContext, db: D1Database, oldSlug: string): Promise<Response> {
-  const parsed = await readJson(context.request);
+  const parsed = await readProductSubmission(context.request);
   if (parsed.response) return parsed.response;
-  const { product, issues } = normalizeProductInput(parsed.data);
+  const submission = parsed.submission!;
+  const { product, issues } = normalizeProductInput(submission.data);
   if (!product) return json({ error: 'Please correct the highlighted product details.', issues }, 422);
   const publicationError = validatePublication(product.status, product.affiliateUrl, context.env.AMAZON_ASSOCIATE_TAG, context.request);
   if (publicationError) return publicationError;
@@ -174,9 +271,23 @@ async function updateProduct(context: PagesContext, db: D1Database, oldSlug: str
   if (collision && collision.id !== current.id) return json({ error: 'Another product already uses this name. Add a distinguishing word.' }, 409);
   const now = new Date().toISOString();
   const publishedAt = product.status === 'published' ? current.published_at ?? now : null;
-  const result = await db.prepare('UPDATE products SET slug = ?, name = ?, category = ?, description = ?, key_features = ?, intended_use = ?, benefits = ?, limitations = ?, product_url = ?, affiliate_url = ?, image_url = ?, status = ?, updated_at = ?, published_at = ? WHERE id = ?')
-    .bind(slug, product.name, product.category, product.description, JSON.stringify(product.keyFeatures), product.intendedUse, JSON.stringify(product.benefits), JSON.stringify(product.limitations), product.productUrl, product.affiliateUrl, null, product.status, now, publishedAt, current.id).run();
-  if (!result.success || !result.meta?.changes) return json({ error: 'The database did not confirm the update. No success was recorded.' }, 500);
+  if (submission.imageAction === 'remove' && submission.imageFile) return json({ error: 'The image selection changed. Refresh the form and try again.' }, 400);
+  if (submission.imageAction === 'keep' && submission.imageFile) return json({ error: 'The image selection changed. Refresh the form and try again.' }, 400);
+  const storedImage = await storeImage(context, submission.imageAction === 'upload' ? submission.imageFile : undefined);
+  if (storedImage instanceof Response) return storedImage;
+  const imageUrl = submission.imageAction === 'remove' ? null : storedImage?.path ?? current.image_url;
+  let result;
+  try {
+    result = await db.prepare('UPDATE products SET slug = ?, name = ?, category = ?, description = ?, key_features = ?, intended_use = ?, benefits = ?, limitations = ?, product_url = ?, affiliate_url = ?, image_url = ?, status = ?, updated_at = ?, published_at = ? WHERE id = ?')
+      .bind(slug, product.name, product.category, product.description, JSON.stringify(product.keyFeatures), product.intendedUse, JSON.stringify(product.benefits), JSON.stringify(product.limitations), product.productUrl, product.affiliateUrl, imageUrl, product.status, now, publishedAt, current.id).run();
+  } catch {
+    await removeNewImageIfUnreferenced(context, db, storedImage);
+    return json({ error: 'The database could not confirm the update. Refresh the product list before trying again.' }, 500);
+  }
+  if (!result.success || !result.meta?.changes) {
+    await removeNewImageIfUnreferenced(context, db, storedImage);
+    return json({ error: 'The database did not confirm the update. No success was recorded.' }, 500);
+  }
   const saved = await readProduct(db, slug);
   if (!saved) return json({ error: 'The update could not be confirmed. Refresh the product list.' }, 500);
   return json({ product: safeProduct(saved, true) });

@@ -1,6 +1,6 @@
 # Pickora — a product discovery publication
 
-Pickora is the working name for a multi-category editorial shopping website for Indian readers. The public pages are built with Astro static site generation, TypeScript, Markdown content collections and CSS. Product records are stored in Cloudflare D1. Product images are not configured; product cards use Pickora’s built-in placeholder. The design is responsive, uses locally stored original SVG artwork, system fonts and minimal browser JavaScript.
+Pickora is the working name for a multi-category editorial shopping website for Indian readers. The public pages are built with Astro static site generation, TypeScript, Markdown content collections and CSS. Product records are stored in Cloudflare D1. Optional owner-uploaded product images are normalized and stored in Workers KV; cards use Pickora’s built-in placeholder when an image is absent or unavailable. The design is responsive, uses locally stored original SVG artwork, system fonts and minimal browser JavaScript.
 
 > **Working brand:** Pickora has not been cleared as a final brand. Before launch, check domain availability, similar businesses and relevant trademarks. Replace the name, mark and tagline centrally in `src/config/site.ts` and `public/brand/`.
 
@@ -29,9 +29,11 @@ The initial ten pieces in those folders are substantial unpublished drafts. Revi
 
 Use the private dashboard at `/admin/`. It is protected by a GitHub OAuth login and server-side verification of the owner's stable GitHub user ID. The dashboard saves to D1; a successful publish is visible through the public product API without a code edit or GitHub push. The public site receives only records whose status is `published`. Prices are not stored. See **Private product dashboard setup** below before using it.
 
-Enter accurate product details yourself and verify the product URL, Special Link and claims. The dashboard validates HTTPS and Amazon India domains, but cannot verify that a Special Link belongs to your account or that product claims are true. The exact Special Link string is preserved. Use a link copied from Associates Central. Do not invent a tracking tag, price, rating, review or availability claim. Product images are currently unavailable; public cards use the built-in Pickora placeholder.
+Enter accurate product details yourself and verify the product URL, Special Link and claims. The dashboard validates HTTPS and Amazon India domains, but cannot verify that a Special Link belongs to your account or that product claims are true. The exact Special Link string is preserved. Use a link copied from Associates Central. Do not invent a tracking tag, price, rating, review or availability claim. Product images are optional; uploads need the `PRODUCT_IMAGES` KV binding, and public cards use the built-in Pickora placeholder when no image is available.
 
-A product can be saved and published without an image. The dashboard does not upload files, accept image URLs, or require Cloudflare R2.
+A product can be saved and published without an image. The dashboard can accept a local JPG, PNG, or WebP upload (maximum 1 MiB and 2,048 pixels on either dimension). The Pages Function detects the format from file bytes, decodes it with Photon WebAssembly, rejects unsupported or malformed content, and re-encodes it as WebP before storing it in KV. D1 stores only an opaque same-origin image path in its existing nullable `image_url` column. Uploaded image metadata is removed by re-encoding. Old KV objects are intentionally retained on replacement/removal because safe shared-reference cleanup is not guaranteed; this can leave orphaned objects.
+
+The SiteStripe image URL field is visible but disabled for now. Amazon’s official SiteStripe help confirms that its “Get Link: Image” workflow creates image links, but it does not document a stable image source host and URL pattern that this app can safely validate. The app does not accept arbitrary external URLs or fetch them. Do not copy an image URL from a product page or guess its host. Revisit URL support only after the exact SiteStripe output format and applicable image-use terms are confirmed. Amazon’s current PA API license says not to store/cache images and permits storing a link to PA API image content for up to 24 hours; this wording is specific to PA API content and should not be generalized to SiteStripe without confirmation. See the [SiteStripe help](https://affiliate-program.amazon.in/help/node/topic/GJMMT7G4C8K4Y3AY) and [Operating Agreement](https://affiliate-program.amazon.in/help/operating/agreement).
 
 ### Add or edit a category
 
@@ -88,12 +90,18 @@ The dashboard uses the existing category list, with Electronics selected initial
 
 For local Functions development, Wrangler uses a local-only database identifier in `wrangler.jsonc`; it is not a Cloudflare production database ID. This config intentionally omits `pages_build_output_dir`, so Cloudflare treats it as local development configuration rather than Pages deployment configuration. Keep the production D1 binding in the Cloudflare dashboard. Copy `.dev.vars.example` to the ignored `.dev.vars` to opt into a local authentication bypass restricted to loopback hostnames. The bypass cannot authenticate requests on the production Pages hostname, even if accidentally configured there. Run `npm run db:migrate:local`, then `npm run dev:pages`; local dashboard use does not require GitHub OAuth credentials. For production, unset `PICKORA_LOCAL_AUTH`.
 
+### Product image storage setup (required for uploads)
+
+Uploads require a Cloudflare Workers KV namespace with the binding name `PRODUCT_IMAGES`. This repository contains a clearly fake local placeholder ID in `wrangler.jsonc` only; it is not a production namespace ID. No namespace has been created or configured by this project change. In the Cloudflare dashboard, create a KV namespace, then open the `affiliate-website` Pages project and add a **KV namespace** binding named `PRODUCT_IMAGES` that selects that namespace. Add the binding to **Production** and to **Preview** only if previews should accept uploads. Save settings and redeploy through the normal reviewed workflow before using production uploads. Keep the existing `DB` binding unchanged.
+
+For `wrangler pages dev`, Wrangler locally emulates the configured KV binding; the fake ID in the local config does not connect to a Cloudflare namespace. Tests use an in-memory KV mock and require no credentials. KV is eventually consistent across locations, so a newly uploaded image can take time to appear everywhere. KV free usage has quotas and can be exceeded; check current account limits and pricing before production use. See [KV pricing](https://developers.cloudflare.com/kv/platform/pricing/) and [Pages Function bindings](https://developers.cloudflare.com/pages/functions/bindings/). A missing production binding makes upload requests fail safely without saving an image reference; existing product management and no-image publishing remain available.
+
 ### How product publishing works
 
 1. Open `/admin/` and sign in with the configured GitHub owner account.
 2. Enter the exact product name and the facts you checked. Electronics is selected initially.
 3. Paste the Amazon India product page and the complete Special Link copied from Associates Central. The server accepts only HTTPS Amazon India hosts and stores the Special Link string without rebuilding it.
-4. Images are optional and currently unavailable. Product cards use the built-in placeholder.
+4. Images are optional. Upload a JPG, PNG, or WebP if the `PRODUCT_IMAGES` KV binding is configured; otherwise leave the image blank and cards use the built-in placeholder. SiteStripe image URL entry remains disabled until its safe URL format is verified.
 5. Choose **Publish now** and click **Publish product**. The dashboard reports success only after D1 confirms the write. Published products appear on the product page and matching category page on the next request; the product API disables edge caching.
 6. Use **Edit**, **Unpublish**, or **Delete** later. Unpublish and delete ask for confirmation. Repeated submission delivery is idempotent and duplicate product slugs are rejected.
 
@@ -115,7 +123,7 @@ No Cloudflare account, GitHub authorization, domain, paid resource or live deplo
 
 ## Privacy and launch review
 
-No analytics, advertising scripts, visitor accounts or contact form are configured. Local search stays in the browser. The private admin stores product details in D1. Product images are not collected or stored. Hosting providers may process request logs. The privacy policy and terms are drafts; complete and review them for the actual host, business, contact channel, affiliate programs and applicable law before public launch.
+No analytics, advertising scripts, visitor accounts or contact form are configured. Local search stays in the browser. The private admin stores product details in D1 and optional image uploads in Workers KV. Public product cards retrieve uploaded images through a same-origin Pages Function. Hosting providers may process request logs. The privacy policy and terms are drafts; complete and review them for the actual host, business, contact channel, affiliate programs and applicable law before public launch.
 
 ## Troubleshooting
 

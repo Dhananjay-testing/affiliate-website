@@ -62,7 +62,7 @@ export function normalizeProductInput(value: unknown): { product?: ProductInput;
   if (!amazonUrl(productUrl)) issues.push({ field: 'productUrl', message: 'Use a complete HTTPS Amazon India product URL (amazon.in or www.amazon.in). No credentials or other sites are accepted.' });
   if (!isAmazonSpecialLink(affiliateUrl)) issues.push({ field: 'affiliateUrl', message: 'Use the complete HTTPS Amazon India Special Link with its tracking tag from Associates Central.' });
   if (!status) issues.push({ field: 'status', message: 'Choose Publish now or Save as draft.' });
-  if (raw.imageUrl !== undefined && raw.imageUrl !== null && raw.imageUrl !== '') issues.push({ field: 'imageUrl', message: 'Product images are not currently supported. Omit the image field.' });
+  if (raw.imageUrl !== undefined && raw.imageUrl !== null && raw.imageUrl !== '') issues.push({ field: 'imageUrl', message: 'Image paths are assigned by Pickora. Use the dashboard image controls.' });
 
   if (issues.length || !name || !category || !description || !keyFeatures || !intendedUse || !benefits || !limitations || !status) return { issues };
   return {

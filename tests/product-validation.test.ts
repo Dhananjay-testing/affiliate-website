@@ -44,10 +44,10 @@ const tests: Array<[string, () => void | Promise<void>]> = [
   assert.equal(isAmazonSpecialLink(valid.affiliateUrl, 'local-test'), true);
 }],
 
-['accepts products without images and rejects supplied image paths or URLs', () => {
+['accepts products without images and rejects user-supplied image paths or external URLs', () => {
   assert.ok(normalizeProductInput(valid).product);
   assert.ok(normalizeProductInput({ ...valid, imageUrl: null }).product);
-  for (const imageUrl of ['https://images.example/photo.jpg', '/images/products/123e4567-e89b-12d3-a456-426614174000.webp']) {
+  for (const imageUrl of ['https://images.example/photo.jpg', '/api/product-images/123e4567-e89b-42d3-a456-426614174000']) {
     const result = normalizeProductInput({ ...valid, imageUrl });
     assert.equal(result.product, undefined);
     assert.ok(result.issues.some((issue) => issue.field === 'imageUrl'));
@@ -58,10 +58,19 @@ const tests: Array<[string, () => void | Promise<void>]> = [
   const card = renderProductCard({
     slug: 'example-product', name: 'Example product', category: 'Electronics', description: 'Owner supplied description.',
     key_features: '["Feature"]', intended_use: 'Owner supplied use.', benefits: '["Benefit"]', limitations: '["Limitation"]',
-    affiliate_url: valid.affiliateUrl,
+    affiliate_url: valid.affiliateUrl, image_url: null,
   }, 'local-test');
-  assert.match(card ?? '', /class="product-placeholder" aria-hidden="true"><span>✳<\/span>/);
+  assert.match(card ?? '', /class="product-placeholder"><span aria-hidden="true">✳<\/span><\/div>/);
   assert.doesNotMatch(card ?? '', /<img\b/);
+}],
+
+['renders only an application-issued image path and useful alt text', () => {
+  const card = renderProductCard({ slug: 'example-product', name: 'Example product', category: 'Electronics', description: 'Owner supplied description.', key_features: '[]', intended_use: 'Owner supplied use.', benefits: '[]', limitations: '[]', affiliate_url: valid.affiliateUrl, image_url: '/api/product-images/123e4567-e89b-42d3-a456-426614174000' }, 'local-test');
+  assert.match(card ?? '', /src="\/api\/product-images\/123e4567-e89b-42d3-a456-426614174000"/);
+  assert.match(card ?? '', /alt="Product image for Example product"/);
+  const invalid = renderProductCard({ slug: 'example-product', name: 'Example product', category: 'Electronics', description: 'Owner supplied description.', key_features: '[]', intended_use: 'Owner supplied use.', benefits: '[]', limitations: '[]', affiliate_url: valid.affiliateUrl, image_url: 'https://unapproved.example/file.png' }, 'local-test');
+  assert.match(invalid ?? '', /class="product-placeholder"><span aria-hidden="true">✳<\/span>/);
+  assert.doesNotMatch(invalid ?? '', /unapproved\.example/);
 }],
 
 ['requires owner-supplied features, benefits, limitations, and a supported category', () => {
